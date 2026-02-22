@@ -1,4 +1,4 @@
-# AI-agent-practice:  
+# NekoAI-agent:  
 
 *This repository documents my journey of practicing AI Agents*
 

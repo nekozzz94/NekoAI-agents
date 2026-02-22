@@ -5,6 +5,8 @@
 
 ![alt text](image.png)
 
+* This agent has no memory, every chat is new conversation.  
+
 # COMPONENTS EXPLAIN
 
 ## 1. Money lover MCP:  
