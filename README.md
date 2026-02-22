@@ -10,5 +10,11 @@
     - Gemini API lib
     - Python asyncio
 ```
-
+[2. Telegram Bot](telegram-bot/README.md)
+```yml
+    - Money Lover MCP
+    - Telegram Bot
+    - Gemini API lib
+    - Python asyncio
+```
 ## 🐾 References:  
