@@ -84,13 +84,13 @@ python3 money-bot.py
 
 ## Screenshots
 
-**Welcome message**
+**Welcome message**  
 ![Welcome message](image-1.png)
 
-**Asking about transactions**
+**Asking about transactions**  
 ![Asking a question](image-2.png)
 
-**Server logs**
+**Server logs**  
 ![Logs](image-3.png)
 
 ---

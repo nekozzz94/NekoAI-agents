@@ -2,7 +2,13 @@ import asyncio
 import os
 import logging
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
 from google import genai
 from google.genai import types, errors
 
@@ -27,7 +33,9 @@ SYSTEM_INSTRUCTION = (
 genai_client = genai.Client(api_key=GEMINI_API_KEY)
 MODEL_ID = "gemini-2.5-flash"
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 
@@ -57,13 +65,17 @@ class MoneyLoverBot:
             cleaned_params.pop("$schema", None)
             cleaned_params.pop("additionalProperties", None)
 
-            gemini_tools.append(types.Tool(
-                function_declarations=[types.FunctionDeclaration(
-                    name=tool.name,
-                    description=tool.description,
-                    parameters=cleaned_params,
-                )]
-            ))
+            gemini_tools.append(
+                types.Tool(
+                    function_declarations=[
+                        types.FunctionDeclaration(
+                            name=tool.name,
+                            description=tool.description,
+                            parameters=cleaned_params,
+                        )
+                    ]
+                )
+            )
         return gemini_tools
 
     async def _summarise_and_compress(self, user_id: int, token_count: int) -> bool:
@@ -98,9 +110,8 @@ class MoneyLoverBot:
         try:
             summary_response = await genai_client.aio.models.generate_content(
                 model=MODEL_ID,
-                contents=history + [
-                    types.Content(role="user", parts=[types.Part(text=summary_prompt)])
-                ],
+                contents=history
+                + [types.Content(role="user", parts=[types.Part(text=summary_prompt)])],
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,
                 ),
@@ -119,17 +130,25 @@ class MoneyLoverBot:
         # Replace history with a single context-setting message
         compressed_context = types.Content(
             role="user",
-            parts=[types.Part(text=(
-                f"[CONVERSATION SUMMARY — treat this as prior context]\n{summary_text}"
-            ))]
+            parts=[
+                types.Part(
+                    text=(
+                        f"[CONVERSATION SUMMARY — treat this as prior context]\n{summary_text}"
+                    )
+                )
+            ],
         )
         # Acknowledge the summary so history stays in user/model alternating format
         compressed_ack = types.Content(
             role="model",
-            parts=[types.Part(text=(
-                "Understood. I have the summary of our previous conversation "
-                "and will continue from there."
-            ))]
+            parts=[
+                types.Part(
+                    text=(
+                        "Understood. I have the summary of our previous conversation "
+                        "and will continue from there."
+                    )
+                )
+            ],
         )
         self.conversation_history[user_id] = [compressed_context, compressed_ack]
         logger.info(f"History compressed to summary for user {user_id}.")
@@ -140,10 +159,14 @@ class MoneyLoverBot:
         user_text = update.message.text
         history = self.get_history(user_id)
 
-        logger.info(f"User {user_id} | History length: {len(history)} | Message: {user_text!r}")
+        logger.info(
+            f"User {user_id} | History length: {len(history)} | Message: {user_text!r}"
+        )
 
         # Build the new user turn
-        new_user_content = types.Content(role="user", parts=[types.Part(text=user_text)])
+        new_user_content = types.Content(
+            role="user", parts=[types.Part(text=user_text)]
+        )
         # Full contents = prior history + this user message
         contents = history + [new_user_content]
 
@@ -153,8 +176,8 @@ class MoneyLoverBot:
             env={
                 "EMAIL": MONEYLOVER_EMAIL,
                 "PASSWORD": MONEYLOVER_PASSWORD,
-                "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")
-            }
+                "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
+            },
         )
 
         async with stdio_client(server_params) as (read, write):
@@ -166,6 +189,10 @@ class MoneyLoverBot:
                 generate_config = types.GenerateContentConfig(
                     tools=tools,
                     system_instruction=SYSTEM_INSTRUCTION,
+                    temperature=1,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                        disable=False, maximum_remote_calls=10
+                    ),
                 )
 
                 # --- Step 1: First Gemini call ---
@@ -175,6 +202,7 @@ class MoneyLoverBot:
                         contents=contents,
                         config=generate_config,
                     )
+                    logger.debug(f"1st response: {response}")
                 except Exception as e:
                     await update.message.reply_text(f"Error contacting AI: {e}")
                     return
@@ -189,30 +217,45 @@ class MoneyLoverBot:
 
                     if has_function_call:
                         fc = response.candidates[0].content.parts[0].function_call
-                        logger.info(f"--- Calling MCP Tool: {fc.name} with args: {fc.args} ---")
+                        logger.info(
+                            f"--- Calling MCP Tool: {fc.name} with args: {fc.args} ---"
+                        )
                         await update.message.reply_chat_action("typing")
 
                         # Execute the MCP tool
                         tool_result = await session.call_tool(fc.name, fc.args)
                         tool_result_text = (
                             tool_result.content[0].text
-                            if tool_result.content else "No result"
+                            if tool_result.content
+                            else "No result"
                         )
+
+                        logger.debug(f"tool result: {tool_result}")
 
                         # Build extended contents for the final response
                         function_response_content = types.Content(
                             role="user",
-                            parts=[types.Part(function_response=types.FunctionResponse(
-                                name=fc.name,
-                                response={"result": tool_result_text}
-                            ))]
+                            parts=[
+                                types.Part(
+                                    function_response=types.FunctionResponse(
+                                        name=fc.name,
+                                        response={"result": tool_result_text},
+                                    )
+                                )
+                            ],
                         )
                         extended_contents = contents + [
-                            response.candidates[0].content,  # model's function_call turn
+                            response.candidates[
+                                0
+                            ].content,  # model's function_call turn
                             function_response_content,
                         ]
 
-                        # Final Gemini call with tool result
+                        # Final Gemini call without tool
+                        generate_config = types.GenerateContentConfig(
+                            system_instruction=SYSTEM_INSTRUCTION,
+                            temperature=1
+                        )
                         final_response = await genai_client.aio.models.generate_content(
                             model=MODEL_ID,
                             contents=extended_contents,
@@ -223,29 +266,32 @@ class MoneyLoverBot:
                         reply_text = (
                             final_response.text
                             if hasattr(final_response, "text") and final_response.text
-                            else "Sorry, I couldn't generate a response."
+                            else f"Sorry, I couldn't generate a response. {final_response}"
                         )
                         await update.message.reply_text(reply_text)
 
                         # --- Update history with all turns from this exchange ---
-                        history.extend([
-                            new_user_content,
-                            response.candidates[0].content,   # function_call
-                            function_response_content,         # function_response
-                            final_response.candidates[0].content,  # final text
-                        ])
+                        history.extend(
+                            [
+                                new_user_content,
+                                response.candidates[0].content,  # function_call
+                                function_response_content,  # function_response
+                                final_response.candidates[0].content,  # final text
+                            ]
+                        )
 
                         # --- Compress history if token limit reached ---
                         total_tokens = (
                             final_response.usage_metadata.total_token_count
-                            if final_response.usage_metadata else 0
+                            if final_response.usage_metadata
+                            else 0
                         )
                         logger.info(f"Total tokens used: {total_tokens}/{TOKEN_LIMIT}")
                         if await self._summarise_and_compress(user_id, total_tokens):
                             await update.message.reply_text(
                                 "ℹ️ *Conversation memory was compressed.* "
                                 "I've summarised our chat so far and will continue from that summary.",
-                                parse_mode="Markdown"
+                                parse_mode="Markdown",
                             )
 
                     else:
@@ -258,22 +304,25 @@ class MoneyLoverBot:
                         await update.message.reply_text(reply_text)
 
                         # --- Update history ---
-                        history.extend([
-                            new_user_content,
-                            response.candidates[0].content,
-                        ])
+                        history.extend(
+                            [
+                                new_user_content,
+                                response.candidates[0].content,
+                            ]
+                        )
 
                         # --- Compress history if token limit reached ---
                         total_tokens = (
                             response.usage_metadata.total_token_count
-                            if response.usage_metadata else 0
+                            if response.usage_metadata
+                            else 0
                         )
                         logger.info(f"Total tokens used: {total_tokens}/{TOKEN_LIMIT}")
                         if await self._summarise_and_compress(user_id, total_tokens):
                             await update.message.reply_text(
                                 "ℹ️ *Conversation memory was compressed.* "
                                 "I've summarised our chat so far and will continue from that summary.",
-                                parse_mode="Markdown"
+                                parse_mode="Markdown",
                             )
 
                 except Exception as e:
@@ -288,7 +337,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Commands:\n"
         "• /start — Show this message\n"
         "• /clear — Clear conversation memory",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
     )
 
 
@@ -305,7 +354,9 @@ if __name__ == "__main__":
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("clear", clear))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot_logic.handle_message))
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, bot_logic.handle_message)
+    )
 
     print(f"Bot is running... (Token limit: {TOKEN_LIMIT})")
     application.run_polling()
