@@ -208,127 +208,126 @@ class MoneyLoverBot:
                     return
 
                 # --- Step 2: Handle Tool Calls (Agentic Loop) ---
-                try:
-                    has_function_call = (
-                        response.candidates
-                        and response.candidates[0].content.parts
-                        and response.candidates[0].content.parts[0].function_call
-                    )
+                counter = 10
+                reply_text = ""
 
-                    if has_function_call:
-                        fc = response.candidates[0].content.parts[0].function_call
-                        logger.info(
-                            f"--- Calling MCP Tool: {fc.name} with args: {fc.args} ---"
-                        )
-                        await update.message.reply_chat_action("typing")
-
-                        # Execute the MCP tool
-                        tool_result = await session.call_tool(fc.name, fc.args)
-                        tool_result_text = (
-                            tool_result.content[0].text
-                            if tool_result.content
-                            else "No result"
+                while counter > 0:
+                    counter = counter - 1
+                    try:
+                        has_function_call = (
+                            response.candidates
+                            and response.candidates[0].content.parts
+                            and response.candidates[0].content.parts[0].function_call
                         )
 
-                        logger.debug(f"tool result: {tool_result}")
+                        if has_function_call:
+                            fc = response.candidates[0].content.parts[0].function_call
+                            logger.info(
+                                f"--- Calling MCP Tool: {fc.name} with args: {fc.args} ---"
+                            )
+                            await update.message.reply_chat_action("typing")
 
-                        # Build extended contents for the final response
-                        function_response_content = types.Content(
-                            role="user",
-                            parts=[
-                                types.Part(
-                                    function_response=types.FunctionResponse(
-                                        name=fc.name,
-                                        response={"result": tool_result_text},
+                            # Execute the MCP tool
+                            tool_result = await session.call_tool(fc.name, fc.args)
+                            tool_result_text = (
+                                tool_result.content[0].text
+                                if tool_result.content
+                                else "No result"
+                            )
+
+                            logger.debug(f"tool result: {tool_result}")
+
+                            # Build extended contents for the final response
+                            function_response_content = types.Content(
+                                role="user",
+                                parts=[
+                                    types.Part(
+                                        function_response=types.FunctionResponse(
+                                            name=fc.name,
+                                            response={"result": tool_result_text},
+                                        )
                                     )
+                                ],
+                            )
+                            extended_contents = contents + [
+                                response.candidates[
+                                    0
+                                ].content,  # model's function_call turn
+                                function_response_content,
+                            ]
+
+                            response = await genai_client.aio.models.generate_content(
+                                model=MODEL_ID,
+                                contents=extended_contents,
+                                config=generate_config,
+                            )
+                            logger.debug(f"Response: {response}")
+
+                            reply_text = (
+                                response.text
+                                if hasattr(response, "text") and response.text
+                                else f"Sorry, I couldn't generate a response. {response}"
+                            )
+
+                            # --- Update history with all turns from this exchange ---
+                            history.extend(
+                                [
+                                    new_user_content,
+                                    function_response_content,
+                                ]
+                            )
+
+                            # --- Compress history if token limit reached ---
+                            total_tokens = (
+                                response.usage_metadata.total_token_count
+                                if response.usage_metadata
+                                else 0
+                            )
+                            logger.info(f"Total tokens used: {total_tokens}/{TOKEN_LIMIT}")
+                            if await self._summarise_and_compress(user_id, total_tokens):
+                                await update.message.reply_text(
+                                    "ℹ️ *Conversation memory was compressed.* "
+                                    "I've summarised our chat so far and will continue from that summary.",
+                                    parse_mode="Markdown",
                                 )
-                            ],
-                        )
-                        extended_contents = contents + [
-                            response.candidates[
-                                0
-                            ].content,  # model's function_call turn
-                            function_response_content,
-                        ]
 
-                        # Final Gemini call without tool
-                        generate_config = types.GenerateContentConfig(
-                            system_instruction=SYSTEM_INSTRUCTION,
-                            temperature=1
-                        )
-                        final_response = await genai_client.aio.models.generate_content(
-                            model=MODEL_ID,
-                            contents=extended_contents,
-                            config=generate_config,
-                        )
-                        logger.debug(f"Final response: {final_response}")
-
-                        reply_text = (
-                            final_response.text
-                            if hasattr(final_response, "text") and final_response.text
-                            else f"Sorry, I couldn't generate a response. {final_response}"
-                        )
-                        await update.message.reply_text(reply_text)
-
-                        # --- Update history with all turns from this exchange ---
-                        history.extend(
-                            [
-                                new_user_content,
-                                response.candidates[0].content,  # function_call
-                                function_response_content,  # function_response
-                                final_response.candidates[0].content,  # final text
-                            ]
-                        )
-
-                        # --- Compress history if token limit reached ---
-                        total_tokens = (
-                            final_response.usage_metadata.total_token_count
-                            if final_response.usage_metadata
-                            else 0
-                        )
-                        logger.info(f"Total tokens used: {total_tokens}/{TOKEN_LIMIT}")
-                        if await self._summarise_and_compress(user_id, total_tokens):
-                            await update.message.reply_text(
-                                "ℹ️ *Conversation memory was compressed.* "
-                                "I've summarised our chat so far and will continue from that summary.",
-                                parse_mode="Markdown",
+                        else:
+                            # No tool call — direct text response
+                            reply_text = (
+                                response.text
+                                if hasattr(response, "text") and response.text
+                                else "Sorry, I couldn't generate a response."
                             )
 
-                    else:
-                        # No tool call — direct text response
-                        reply_text = (
-                            response.text
-                            if hasattr(response, "text") and response.text
-                            else "Sorry, I couldn't generate a response."
-                        )
-                        await update.message.reply_text(reply_text)
-
-                        # --- Update history ---
-                        history.extend(
-                            [
-                                new_user_content,
-                                response.candidates[0].content,
-                            ]
-                        )
-
-                        # --- Compress history if token limit reached ---
-                        total_tokens = (
-                            response.usage_metadata.total_token_count
-                            if response.usage_metadata
-                            else 0
-                        )
-                        logger.info(f"Total tokens used: {total_tokens}/{TOKEN_LIMIT}")
-                        if await self._summarise_and_compress(user_id, total_tokens):
-                            await update.message.reply_text(
-                                "ℹ️ *Conversation memory was compressed.* "
-                                "I've summarised our chat so far and will continue from that summary.",
-                                parse_mode="Markdown",
+                            # --- Update history ---
+                            history.extend(
+                                [
+                                    new_user_content,
+                                    response.candidates[0].content,
+                                ]
                             )
 
-                except Exception as e:
-                    logger.exception("Error during tool handling or Gemini response")
-                    await update.message.reply_text(f"Error: {e}")
+                            # --- Compress history if token limit reached ---
+                            total_tokens = (
+                                response.usage_metadata.total_token_count
+                                if response.usage_metadata
+                                else 0
+                            )
+                            logger.info(f"Total tokens used: {total_tokens}/{TOKEN_LIMIT}")
+                            if await self._summarise_and_compress(user_id, total_tokens):
+                                await update.message.reply_text(
+                                    "ℹ️ *Conversation memory was compressed.* "
+                                    "I've summarised our chat so far and will continue from that summary.",
+                                    parse_mode="Markdown",
+                                )
+                            
+                            break
 
+                    except Exception as e:
+                        logger.exception("Error during tool handling or Gemini response")
+                        await update.message.reply_text(f"Error: {e}")
+            
+                await update.message.reply_text(reply_text)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(

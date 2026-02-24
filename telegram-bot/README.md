@@ -6,7 +6,7 @@ A Telegram chatbot that connects to your [Money Lover](https://web.moneylover.me
 
 ## How It Works
 
-![Architecture diagram](image.png)
+![Architecture diagram](images/image.png)
 
 The bot sits between you and Money Lover:
 
@@ -85,13 +85,14 @@ python3 money-bot.py
 ## Screenshots
 
 **Welcome message**  
-![Welcome message](image-1.png)
+![Welcome message](images/image-1.png)
 
 **Asking about transactions**  
-![Asking a question](image-2.png)
+![Asking a question](images/image-2.png)
+![alt text](images/image-5.png)
 
 **Server logs**  
-![Logs](image-3.png)
+![alt text](images/image-4.png)
 
 ---
 
@@ -99,5 +100,9 @@ python3 money-bot.py
 
 - [x] Context memory per user
 - [x] Automatic summarise-and-compress when token limit is reached
+- [ ] Cache history after exiting biot
 - [ ] Optimize token usage further
 - [ ] Scan invoices from Google Drive and log them as transactions
+
+## Issues
+- [x] Can't call tool multi times
