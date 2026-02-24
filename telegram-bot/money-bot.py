@@ -66,18 +66,74 @@ class MoneyLoverBot:
             ))
         return gemini_tools
 
-    def _check_and_reset_if_over_limit(self, user_id: int, token_count: int) -> bool:
+    async def _summarise_and_compress(self, user_id: int, token_count: int) -> bool:
         """
-        Checks if token count exceeds the limit. Resets history and returns True if so.
+        If token_count has reached TOKEN_LIMIT, asks Gemini to summarise the full
+        conversation history, then replaces the history with a single condensed
+        context message so the conversation can continue without losing key facts.
+        Returns True if compression happened, False otherwise.
         """
-        if token_count >= TOKEN_LIMIT:
-            logger.warning(
-                f"Token limit reached for user {user_id} "
-                f"({token_count}/{TOKEN_LIMIT}). Resetting context."
+        if token_count < TOKEN_LIMIT:
+            return False
+
+        logger.warning(
+            f"Token limit reached for user {user_id} "
+            f"({token_count}/{TOKEN_LIMIT}). Summarising history..."
+        )
+
+        history = self.get_history(user_id)
+        if not history:
+            return False
+
+        # Ask Gemini (no tools needed) for a concise summary
+        summary_prompt = (
+            "The following is a conversation between a user and a finance assistant. "
+            "Please write a concise summary that captures:\n"
+            "- All financial transactions mentioned or recorded\n"
+            "- Any balances, wallets, or categories discussed\n"
+            "- Key decisions or action items the user expressed\n"
+            "- Any important context needed to continue the conversation naturally\n\n"
+            "Conversation to summarise:\n"
+        )
+        try:
+            summary_response = await genai_client.aio.models.generate_content(
+                model=MODEL_ID,
+                contents=history + [
+                    types.Content(role="user", parts=[types.Part(text=summary_prompt)])
+                ],
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                ),
             )
-            self.reset_history(user_id)
-            return True
-        return False
+            summary_text = (
+                summary_response.text
+                if hasattr(summary_response, "text") and summary_response.text
+                else "Previous conversation could not be summarised."
+            )
+        except Exception as e:
+            logger.exception("Failed to summarise history; falling back to hard reset.")
+            summary_text = "Previous conversation history was cleared due to an error."
+
+        logger.info(f"Summary for user {user_id}: {summary_text[:200]}...")
+
+        # Replace history with a single context-setting message
+        compressed_context = types.Content(
+            role="user",
+            parts=[types.Part(text=(
+                f"[CONVERSATION SUMMARY — treat this as prior context]\n{summary_text}"
+            ))]
+        )
+        # Acknowledge the summary so history stays in user/model alternating format
+        compressed_ack = types.Content(
+            role="model",
+            parts=[types.Part(text=(
+                "Understood. I have the summary of our previous conversation "
+                "and will continue from there."
+            ))]
+        )
+        self.conversation_history[user_id] = [compressed_context, compressed_ack]
+        logger.info(f"History compressed to summary for user {user_id}.")
+        return True
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -179,16 +235,16 @@ class MoneyLoverBot:
                             final_response.candidates[0].content,  # final text
                         ])
 
-                        # --- Check token limit ---
+                        # --- Compress history if token limit reached ---
                         total_tokens = (
                             final_response.usage_metadata.total_token_count
                             if final_response.usage_metadata else 0
                         )
                         logger.info(f"Total tokens used: {total_tokens}/{TOKEN_LIMIT}")
-                        if self._check_and_reset_if_over_limit(user_id, total_tokens):
+                        if await self._summarise_and_compress(user_id, total_tokens):
                             await update.message.reply_text(
-                                "ℹ️ *Context memory was reset* because the conversation reached "
-                                "the token limit. Starting fresh!",
+                                "ℹ️ *Conversation memory was compressed.* "
+                                "I've summarised our chat so far and will continue from that summary.",
                                 parse_mode="Markdown"
                             )
 
@@ -207,16 +263,16 @@ class MoneyLoverBot:
                             response.candidates[0].content,
                         ])
 
-                        # --- Check token limit ---
+                        # --- Compress history if token limit reached ---
                         total_tokens = (
                             response.usage_metadata.total_token_count
                             if response.usage_metadata else 0
                         )
                         logger.info(f"Total tokens used: {total_tokens}/{TOKEN_LIMIT}")
-                        if self._check_and_reset_if_over_limit(user_id, total_tokens):
+                        if await self._summarise_and_compress(user_id, total_tokens):
                             await update.message.reply_text(
-                                "ℹ️ *Context memory was reset* because the conversation reached "
-                                "the token limit. Starting fresh!",
+                                "ℹ️ *Conversation memory was compressed.* "
+                                "I've summarised our chat so far and will continue from that summary.",
                                 parse_mode="Markdown"
                             )
 
