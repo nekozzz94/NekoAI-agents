@@ -38,10 +38,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 class MoneyLoverBot:
     def __init__(self):
-        self.mcp_session = None
+        # self.mcp_session = None # Removed as session will be managed per-user
         # Per-user conversation history: {user_id: [types.Content, ...]}
         self.conversation_history: dict[int, list[types.Content]] = {}
 
@@ -56,9 +55,9 @@ class MoneyLoverBot:
         self.conversation_history[user_id] = []
         logger.info(f"Context memory reset for user {user_id}")
 
-    async def get_tools(self):
-        """Fetches and cleans MCP tools for Gemini."""
-        mcp_tools = await self.mcp_session.list_tools()
+    async def get_tools_with_session(self, session: ClientSession):
+        """Fetches and cleans MCP tools for Gemini using a provided session."""
+        mcp_tools = await session.list_tools()
         gemini_tools = []
         for tool in mcp_tools.tools:
             cleaned_params = tool.inputSchema.copy()
@@ -170,6 +169,9 @@ class MoneyLoverBot:
         # Full contents = prior history + this user message
         contents = history + [new_user_content]
 
+        # Concurrency improvement: Manage mcp_session within the context of the message handler
+        # instead of as an instance variable.
+        # This ensures each user's interaction has its own isolated MCP session.
         server_params = StdioServerParameters(
             command="npx",
             args=["-y", "@ferdhika31/moneylover-mcp@latest"],
@@ -182,10 +184,14 @@ class MoneyLoverBot:
 
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(read, write) as session:
-                self.mcp_session = session
+                # Temporarily store session to fetch tools, or pass it directly.
+                # For a per-user session, consider storing in context.user_data or passing explicitly.
+                # self.mcp_session = session # Removed due to concurrency concerns
+                # Instead, pass session directly to get_tools or make get_tools accept a session parameter
+                
                 await session.initialize()
 
-                tools = await self.get_tools()
+                tools = await self.get_tools_with_session(session) # Modified to pass session
                 generate_config = types.GenerateContentConfig(
                     tools=tools,
                     system_instruction=SYSTEM_INSTRUCTION,
@@ -203,12 +209,19 @@ class MoneyLoverBot:
                         config=generate_config,
                     )
                     logger.debug(f"1st response: {response}")
+                except errors.ResponseError as e:
+                    logger.exception("Gemini API error during initial content generation")
+                    await update.message.reply_text(
+                        f"Error from AI: {e.message} (Code: {e.code})"
+                    )
+                    return
                 except Exception as e:
-                    await update.message.reply_text(f"Error contacting AI: {e}")
+                    logger.exception("Unexpected error during initial content generation")
+                    await update.message.reply_text(f"An unexpected error occurred: {e}")
                     return
 
                 # --- Step 2: Handle Tool Calls (Agentic Loop) ---
-                counter = 10
+                counter = 10  # Limit to prevent infinite loops
                 reply_text = ""
 
                 while counter > 0:
@@ -300,12 +313,12 @@ class MoneyLoverBot:
                             )
 
                             # --- Update history ---
-                            history.extend(
-                                [
-                                    new_user_content,
-                                    response.candidates[0].content,
-                                ]
-                            )
+                            # Only extend history with model's content if it's a direct text response
+                            if response.candidates and response.candidates[0].content.parts:
+                                history.extend([new_user_content, response.candidates[0].content])
+                            else:
+                                # If no content, just add the user's message to avoid breaking turn-taking
+                                history.append(new_user_content)
 
                             # --- Compress history if token limit reached ---
                             total_tokens = (
@@ -323,11 +336,25 @@ class MoneyLoverBot:
                             
                             break
 
+                    except errors.ResponseError as e:
+                        logger.exception("Gemini API error during agentic loop")
+                        await update.message.reply_text(
+                            f"Error from AI during tool use: {e.message} (Code: {e.code})"
+                        )
+                        break  # Break out of the loop on API error
                     except Exception as e:
-                        logger.exception("Error during tool handling or Gemini response")
-                        await update.message.reply_text(f"Error: {e}")
+                        logger.exception("Unexpected error during tool handling or Gemini response")
+                        await update.message.reply_text(f"An unexpected error occurred: {e}")
+                        break  # Break out of the loop on unexpected error
             
+                # Ensure reply_text is set if no tool call or error occurred
+                if not reply_text and response.text:
+                    reply_text = response.text
+                elif not reply_text:
+                    reply_text = "Sorry, I couldn't generate a response for your request."
+
                 await update.message.reply_text(reply_text)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
