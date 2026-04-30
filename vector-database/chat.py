@@ -1,4 +1,6 @@
 import os
+import warnings
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -10,13 +12,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
-from langchain_core.runnables import RunnableParallel
-from operator import itemgetter
-
 os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 CONNECTION_STRING = f"postgresql+psycopg://neko:{os.environ["DB_PASSWORD"]}@localhost:5432/vector_db"
-COLLECTION_NAME = "TheEconomist"
+COLLECTION_NAME = os.environ["COLLECTION_NAME"]
 
+warnings.filterwarnings("ignore", message=".*Both GOOGLE_API_KEY and GEMINI_API_KEY are set.*")
+if "GOOGLE_API_KEY" in os.environ and "GEMINI_API_KEY" in os.environ:
+    del os.environ["GEMINI_API_KEY"]
 
 embeddings = GoogleGenerativeAIEmbeddings(
     model="models/gemini-embedding-2",
@@ -38,7 +40,7 @@ def get_vector():
 def ask_agent(query):
     vector_store = get_vector()
     # Create a retriever from the existing vector store
-    retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+    retriever = vector_store.as_retriever(search_kwargs={"k": 15})
 
     # Define the Prompt Template
     template = """
@@ -69,7 +71,7 @@ def ask_agent(query):
     return response
 
 if __name__ == "__main__":
-  user_query = input("What would you like to know from the PDF? ")
+  user_query = input(f"What would you like to know from the {COLLECTION_NAME}? \n")
   answer = ask_agent(user_query)
       
   print("\n--- Final Answer ---")

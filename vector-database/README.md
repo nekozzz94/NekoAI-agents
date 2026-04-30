@@ -10,50 +10,12 @@ This repository provides an example of how to leverage a vector database as a so
   - [1. Embedding a PDF](#1-embedding-a-pdf)
   - [2. Query from Vector Database](#2-query-from-vector-database)
   - [3. Look inside database](#3-look-inside-database)
-  - [4. More example](#4-more-example)
+  - [4. More example and issues](#4-more-example-and-issues)
+    - [4.1 "Lost in the Middle" Phenomenon](#41-lost-in-the-middle-phenomenon)
 
 ## 0. System Architecture Diagram
 
-```
-+-----------------------+
-|       User Query      |
-+-----------+-----------+
-            |
-            v
-+-----------+-----------+
-|  Langchain Application|
-| (Python/LLM Logic)    |
-+-----------+-----------+
-            |  Uses Gemini Embedding 2
-            v
-+-----------+-----------+
-| Gemini Embedding 2    |
-| (Text to Vector)      |
-+-----------+-----------+
-            |  Generates Embeddings
-            v
-+-----------+-----------+
-|  PGVector (PostgreSQL)|
-| (Vector Database)     |
-+-----------+-----------+
-            |  Stores & Retrieves Vectors
-            v
-+-----------+-----------+
-| Relevant Documents    |
-| (from Vector Store)   |
-+-----------+-----------+
-            |
-            v
-+-----------+-----------+
-|  Langchain Application|
-| (Context for LLM)     |
-+-----------+-----------+
-            |
-            v
-+-----------------------+
-|       LLM Response    |
-+-----------------------+
-```
+![alt text](images/00.png)
 
 ## 1. Embedding a PDF
 
@@ -86,7 +48,7 @@ Rows are added to the `langchain_pg_embedding` table, where the `embedding` colu
 
 ![Embedding Table](images/03.png)
 
-## 4. More example
+## 4. More example and issues
 ```bash
 python3 Embedding-Pipeline.py
 Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
@@ -145,3 +107,92 @@ Here's what the context says about it:
 *   Anthropic claims Mythos has **surpassed "all but the most skilled humans"** in finding and exploiting security holes in various digital systems, from operating systems to cryptocurrency.
 *   The topic is also framed with the question, "Can five men be trusted with AI?" highlighting concerns about its control.
 ```
+
+### 4.1 "Lost in the Middle" Phenomenon
+a Retrieval Gap
+The Cause: Your similarity_search is likely returning the "Chapter 3" header chunk because it's a perfect keyword match, but it isn't returning the next 10 chunks that actually contain the data.
+
+- **Symtom**  
+    ```bash
+    python3 chat.py 
+    Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+    Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+    What would you like to know from the PDF? generate questions and their answers to revise chapter 3
+
+    --- AI Agent is thinking ---
+
+    --- Final Answer ---
+    Based on the provided context, I can only see the section titles for Chapter 3, not the detailed content. Therefore, I cannot generate questions and their answers to revise the chapter's material.
+
+    However, I can list the topics covered in Chapter 3:
+
+    *   From Embeddings to Modern Language Models: The Transformer Connection
+    *   Encoder-Only Transformers (BERT and Its Variants)
+    *   Decoder-Only Transformers (GPT Family)
+    *   Encoder-Decoder Transformers (T5, BART)
+    *   Embedding Models: The Specialized Vector Generators
+    *   Distinction from Traditional Models
+    *   Role in Modern LLM Applications
+    *   Practical Applications and Use Cases
+    ```
+
+- **The Fix:**
+  - Increase your K-value (the number of retrieved chunks).  
+
+    ```python
+    # Change k from 5 to 10 or 15 to get more "depth" around the chapter title
+    retriever = vector_store.as_retriever(search_kwargs={"k": 15})
+    ```
+
+  - redo the embedding with paramethers  
+  
+    ```python
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=150,
+            add_start_index=True # Keeps track of which page/char the text came from
+        )
+    ``` 
+
+ - **After fix**  
+    ```bash
+    python3 chat.py 
+    Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+    Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+    What would you like to know from the PDF? generate 10 questions and their answers to revise chapter 3
+
+    --- AI Agent is thinking ---
+
+    --- Final Answer ---
+    Here are 10 questions and their answers to revise Chapter 3:
+
+    1.  **Question:** What is the title of Chapter 3?
+        **Answer:** Similarity Search with FAISS.
+
+    2.  **Question:** On what page does Chapter 3, "Similarity Search with FAISS," begin?
+        **Answer:** Page 53.
+
+    3.  **Question:** What foundational concepts are discussed in Chapter 3 regarding similarity search?
+        **Answer:** Foundations, Vector Representations, Distance Metrics, and Selection Heuristics.
+
+    4.  **Question:** What topic is covered on page 55 of Chapter 3?
+        **Answer:** Vector Representations.
+
+    5.  **Question:** Where can you find information about "Distance Metrics" in Chapter 3?
+        **Answer:** Page 56.
+
+    6.  **Question:** What are "FAISS Indexes" and on what page are they introduced in Chapter 3?
+        **Answer:** FAISS Indexes are a type of index used for similarity search, and they are introduced on page 58.
+
+    7.  **Question:** Name at least three types of FAISS Indexes mentioned in Chapter 3.
+        **Answer:** Flat Indexes (Brute Force), IVF-Based Indexes, LSH-Based Indexes, HNSW-Based Indexes, Other Specialized Indexes, and Composite and Transformative Indexes. (Any three of these are correct).
+
+    8.  **Question:** Which type of FAISS Index is also referred to as "Brute Force"?
+        **Answer:** Flat Indexes.
+
+    9.  **Question:** What topic follows "Selection Heuristics" in Chapter 3?
+        **Answer:** FAISS Indexes.
+
+    10. **Question:** What is the final sub-topic discussed under FAISS Indexes in the provided context for Chapter 3?
+        **Answer:** Choosing the Right Index.
+    ```

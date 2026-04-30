@@ -1,4 +1,6 @@
 import os
+import argparse
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -12,8 +14,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 CONNECTION_STRING = f"postgresql+psycopg://neko:{os.environ["DB_PASSWORD"]}@localhost:5432/vector_db"
-COLLECTION_NAME = "TheEconomist"
-
+COLLECTION_NAME = os.environ["COLLECTION_NAME"]
 
 COST_SHEET = {
     "gemini-embedding-2": 0.00002,     # $0.02 per 1M tokens
@@ -22,6 +23,9 @@ COST_SHEET = {
         "output": 0.0004               # $0.40 per 1M tokens
     }
 }
+
+if "GOOGLE_API_KEY" in os.environ and "GEMINI_API_KEY" in os.environ:
+    del os.environ["GEMINI_API_KEY"]
 
 embeddings = GoogleGenerativeAIEmbeddings(
     model="models/gemini-embedding-2",
@@ -48,8 +52,8 @@ def ingest_pdf(file_path):
     # Step 2: Chunk the Text
     # PDFs have complex layouts. Overlap helps maintain context between chunks.
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=100,
+        chunk_size=500,
+        chunk_overlap=150,
         add_start_index=True # Keeps track of which page/char the text came from
     )
     chunks = text_splitter.split_documents(pages)
@@ -125,8 +129,11 @@ def ask_agent(query):
     return response
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="The PDF Embedding-Pipeline")
+    parser.add_argument("pdf", type=str, help="Path to a PDF file.")
 
-    pdf_path = "/home/pooh/Downloads/84.pdf" 
+    args = parser.parse_args()
+    pdf_path = args.pdf
     
     if os.path.exists(pdf_path):
         store = ingest_pdf(pdf_path)
