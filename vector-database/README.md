@@ -18,8 +18,9 @@ A practical guide to leveraging vector databases as external knowledge sources f
     - [1.1 Embedding](#11-embedding)
     - [1.2 Look inside the database](#12-look-inside-the-database)
   - [2. Query from Vector Database](#2-query-from-vector-database)
-  - [3. Issues](#3-issues)
+  - [3. Issues and open questions](#3-issues-and-open-questions)
     - [3.1 "Lost in the Middle" Phenomenon](#31-lost-in-the-middle-phenomenon)
+    - [3.2 up-to-date the document with latest version (?)](#32-up-to-date-the-document-with-latest-version-)
 
 ## 1. Embedding pipeline
 ### 1.1 Embedding
@@ -139,7 +140,7 @@ A RAG agent first retrieves relevant data from a vector database and then forwar
             v
         [ LIST OF DOCUMENTS ]
     ```
-## 3. Issues
+## 3. Issues and open questions
 ### 3.1 "Lost in the Middle" Phenomenon
 **A Retrieval Gap**  
 - **Symtom**  
@@ -227,3 +228,4 @@ A RAG agent first retrieves relevant data from a vector database and then forwar
     10. **Question:** What is the final sub-topic discussed under FAISS Indexes in the provided context for Chapter 3?
         **Answer:** Choosing the Right Index.
     ```
+### 3.2 up-to-date the document with latest version (?)
