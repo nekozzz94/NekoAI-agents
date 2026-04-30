@@ -32,8 +32,6 @@ embeddings = GoogleGenerativeAIEmbeddings(
     output_dimensionality=768
 )
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
-
 def calculate_ingestion_cost(documents):
     total_chars = sum(len(doc.page_content) for doc in documents)
     # Approximation: 1 token = 4 characters
@@ -95,42 +93,9 @@ def ask_question(vector_store, query):
         print(f"{doc.page_content[:200]}...") # Print first 200 chars
         print("-" * 30)
 
-def ask_agent(query):
-    vector_store = get_vector()
-    # Create a retriever from the existing vector store
-    retriever = vector_store.as_retriever(search_kwargs={"k": 5})
-
-    # Define the Prompt Template
-    template = """
-    You are a helpful assistant. Use the following pieces of retrieved context 
-    from a PDF document to answer the question. 
-    If you don't know the answer based on the context, just say you don't know.
-    
-    Context:
-    {context}
-    
-    Question: {question}
-    
-    Answer:
-    """
-    prompt = ChatPromptTemplate.from_template(template)
-
-    # Build the RAG Chain
-    # This automatically: 1. Retrieves docs, 2. Formats them, 3. Sends to LLM
-    rag_chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-
-    print(f"\n--- AI Agent is thinking ---")
-    response = rag_chain.invoke(query)
-    return response
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="The PDF Embedding-Pipeline")
-    parser.add_argument("pdf", type=str, help="Path to a PDF file.")
+    parser.add_argument("--pdf", type=str, help="Path to a PDF file.")
 
     args = parser.parse_args()
     pdf_path = args.pdf
