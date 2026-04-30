@@ -17,4 +17,11 @@
     - Gemini API lib
     - Python asyncio
 ```
+
+[3. Vector database](vector-database/README.md)
+```yml
+    - vector database
+    - langchain package
+    - Postgres pgvector
+```
 ## 🐾 References:  

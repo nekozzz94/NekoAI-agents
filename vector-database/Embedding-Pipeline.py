@@ -1,0 +1,135 @@
+import os
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_postgres import PGVector
+from langchain_postgres.vectorstores import PGVector
+
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
+
+os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+CONNECTION_STRING = f"postgresql+psycopg://neko:{os.environ["DB_PASSWORD"]}@localhost:5432/vector_db"
+COLLECTION_NAME = "TheEconomist"
+
+
+COST_SHEET = {
+    "gemini-embedding-2": 0.00002,     # $0.02 per 1M tokens
+    "gemini-2.5-flash": {
+        "input": 0.0001,               # $0.10 per 1M tokens
+        "output": 0.0004               # $0.40 per 1M tokens
+    }
+}
+
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="models/gemini-embedding-2",
+    output_dimensionality=768
+)
+
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+
+def calculate_ingestion_cost(documents):
+    total_chars = sum(len(doc.page_content) for doc in documents)
+    # Approximation: 1 token = 4 characters
+    total_tokens = total_chars / 4
+    cost = (total_tokens / 1000) * COST_SHEET["gemini-embedding-2"]
+    print(f"Total Ingestion Tokens: ~{total_tokens}")
+    print(f"Total Ingestion Cost: ${cost:.6f}")
+
+def ingest_pdf(file_path):
+    print(f"--- Loading PDF: {file_path} ---")
+    
+    # Step 1: Load PDF
+    loader = PyPDFLoader(file_path)
+    pages = loader.load()
+
+    # Step 2: Chunk the Text
+    # PDFs have complex layouts. Overlap helps maintain context between chunks.
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=100,
+        add_start_index=True # Keeps track of which page/char the text came from
+    )
+    chunks = text_splitter.split_documents(pages)
+    calculate_ingestion_cost(chunks)
+
+    print(f"Split PDF into {len(chunks)} chunks.")
+
+    # Step 3: Connect to Postgres and Add Documents
+    vector_store = PGVector(
+        embeddings=embeddings,
+        collection_name=COLLECTION_NAME,
+        connection=CONNECTION_STRING,
+        use_jsonb=True,
+    )
+    
+    vector_store.add_documents(chunks)
+    print("Successfully stored PDF embeddings in Postgres!")
+    return vector_store
+
+def get_vector():
+    vector_store = PGVector(
+        embeddings=embeddings,
+        collection_name=COLLECTION_NAME,
+        connection=CONNECTION_STRING,
+        use_jsonb=True,
+    )
+
+    return vector_store
+
+def ask_question(vector_store, query):
+    # Step 4: Perform Similarity Search
+    print(f"\nQuestion: {query}")
+    docs = vector_store.similarity_search(query, k=3)
+    
+    print("\n--- Top Relevant Chunks from PDF ---")
+    for i, doc in enumerate(docs):
+        page_num = doc.metadata.get('page', 'Unknown')
+        print(f"Result {i+1} (Page {page_num}):")
+        print(f"{doc.page_content[:200]}...") # Print first 200 chars
+        print("-" * 30)
+
+def ask_agent(query):
+    vector_store = get_vector()
+    # Create a retriever from the existing vector store
+    retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+
+    # Define the Prompt Template
+    template = """
+    You are a helpful assistant. Use the following pieces of retrieved context 
+    from a PDF document to answer the question. 
+    If you don't know the answer based on the context, just say you don't know.
+    
+    Context:
+    {context}
+    
+    Question: {question}
+    
+    Answer:
+    """
+    prompt = ChatPromptTemplate.from_template(template)
+
+    # Build the RAG Chain
+    # This automatically: 1. Retrieves docs, 2. Formats them, 3. Sends to LLM
+    rag_chain = (
+        {"context": retriever, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    print(f"\n--- AI Agent is thinking ---")
+    response = rag_chain.invoke(query)
+    return response
+
+if __name__ == "__main__":
+
+    pdf_path = "/home/pooh/Downloads/84.pdf" 
+    
+    if os.path.exists(pdf_path):
+        store = ingest_pdf(pdf_path)
+        ask_question(store, "What is the main summary of this document?")
+    else:
+        print(f"Error: Could not find {pdf_path}")
