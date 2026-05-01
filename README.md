@@ -20,7 +20,16 @@
 - langchain package
 - Postgres pgvector
     - [PGVector](https://reference.langchain.com/python/langchain-postgres/vectorstores/PGVector): add_documents, similarity_search, as_retriever
-![alt text](images/00.png)
+    - 🌈 compare `similarity_search` and `as_retriever`
+
+| Feature            | `vector_store.similarity_search()`                 | `vector_store.as_retriever()`                                          |
+| :----------------- | :------------------------------------------------- | :--------------------------------------------------------------------- |
+| **Purpose**        | Directly perform a similarity search.              | Create a configurable retriever object for use in LangChain chains.    |
+| **Invocation**     | Immediate execution with `query` and `k` parameters. | Returns a `Runnable` object; actual search occurs on `.invoke()`.      |
+| **Flexibility**    | Less flexible; direct search.                      | Highly configurable (`search_type`, `search_kwargs`, etc.).             |
+| **Return Type**    | `List[Document]` (list of chunks).                 | `List[Document]` (list of chunks).                                     |
+| **Use Case**       | Ad-hoc, single similarity searches.                | Integrated into larger RAG chains, agents, and conversational flows. |
+| **Internals**      | Embeds query, generates SQL, executes, returns docs. | Internally calls `similarity_search` when invoked. 
 
 ## 🐾 Books and References:  
 [1. Vector Databases](https://www.oreilly.com/library/view/vector-databases/9781098177584/)  

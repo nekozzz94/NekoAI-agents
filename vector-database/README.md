@@ -14,23 +14,149 @@ A practical guide to leveraging vector databases as external knowledge sources f
 - [Vector Database as Source Knowledge for LLMs](#vector-database-as-source-knowledge-for-llms)
     - [🍀 Use Cases](#-use-cases)
   - [🍀 Table of Contents](#-table-of-contents)
+  - [0. Setup](#0-setup)
+    - [0.1 Environment Variables (`.env`)](#01-environment-variables-env)
+    - [0.2 Package Dependencies](#02-package-dependencies)
+    - [0.3 Start a pgvector server](#03-start-a-pgvector-server)
   - [1. Embedding pipeline](#1-embedding-pipeline)
     - [1.1 Embedding](#11-embedding)
     - [1.2 Look inside the database](#12-look-inside-the-database)
   - [2. Query from Vector Database](#2-query-from-vector-database)
-  - [3. Useful query](#3-useful-query)
+  - [3. Useful queries](#3-useful-queries)
   - [4. Issues and open questions](#4-issues-and-open-questions)
     - [4.1 "Lost in the Middle" Phenomenon](#41-lost-in-the-middle-phenomenon)
     - [4.2 up-to-date the document with latest version (?)](#42-up-to-date-the-document-with-latest-version-)
 
+## 0. Setup
+### 0.1 Environment Variables (`.env`)
+The following environment variables are necessary for running python scripts,  
+set them in your `.env` and source it before running.
+
+| Variable              | Description                                                               |
+| :-------------------- | :------------------------------------------------------------------------ |
+| `DB_PASSWORD`         | Password for the PostgreSQL database user.                                |
+| `GEMINI_API_KEY`      | Your API key for accessing the Google Gemini API.                         |
+| `COLLECTION_NAME`     | The name of the collection in PGVector where embeddings are stored.       |
+| `PDF_HASH_CACHE_FILE` | Path to the JSON file used for caching PDF hashes to avoid re-embedding. |
+| `SQL_ECHO`            | Set to `1` to enable SQLAlchemy SQL echo (for debugging), `0` to disable. |
+
+### 0.2 Package Dependencies
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install langchain-postgres psycopg[binary] langchain-google-genai
+pip install pypdf
+```
+
+### 0.3 Start a pgvector server
+```bash
+./pg-setup.sh
+```
+
 ## 1. Embedding pipeline
 ### 1.1 Embedding
-This section demonstrates the process of embedding a PDF document into the vector database. The visual below illustrates the workflow:  
-    ![alt text](images/05.png)
+This section demonstrates the process of embedding a PDF document into the vector database. 
+ - The visual below illustrates the workflow:  
+
+    ```bash
+        [ PDF FILE ]
+            |
+            | (PyPDFLoader)
+            v
+        [  PAGES   ]  <-- List of Document objects (1 per PDF page)
+            |
+            | (RecursiveCharacterTextSplitter)
+            v
+        [  CHUNKS  ]  <-- Smaller Document objects (e.g., 1000 chars)
+            |
+            | (add_documents call)
+            v
+    +-----------------------+
+    |       PGVector        |  <--- The LangChain Wrapper
+    +-----------------------+
+            |
+            | 1. Send text to API
+            v
+    +-----------------------+
+    |  gemini-embedding-2   |  <--- Google Cloud API
+    +-----------------------+
+            |
+            | 2. Return Vector [0.12, -0.04, ...]
+            v
+    +-----------------------+
+    |       PGVector        |
+    +-----------------------+
+            |
+            | 3. SQL INSERT
+            v
+    +-----------------------+
+    |  Postgres (pgvector)  |  <--- Physical Storage
+    |-----------------------|
+    | [id] [text] [vector]  |
+    +-----------------------+
+    ```
 
 - output example:  
+    ```bash
+    python3 PDFEmbedding.py --pdf ./TheEconomistUK_1804.pdf
+    --- Loading PDF: ./TheEconomistUK_1804.pdf ---
+    Split PDF into 685 chunks.
+    ⋆˚꩜｡  Total Tokens: ~153017.5
+    ≽^- ˕ -^≼ ᶻ 𝗓 𐰁 Total Cost: $0.003060
+    Successfully stored PDF embeddings in Postgres!
 
-    ![Embedding a PDF](images/01.png)
+    Question: What is the main summary of this document?
+
+    --- Top Relevant Chunks from PDF ---
+    Result 1 (Page 0):
+    The Mythosmoment
+    Can ﬁve men be trusted with AI?
+    The food shock from Iran
+    Who votes for Reform UK?
+    Venezuela after Maduro
+    J.D. V ance, righteous hypocrite
+    APRIL 18TH–24TH 2026
+    C002...
+    ----------------------------------------------------------------------------------------------------
+    Result 2 (Page 6):
+    spending from 2% of GDP to 3%
+    by 2033. Australia “faces its
+    most complex and threatening
+    strategic circumstances” since
+    the second world war, said the
+    defence minister. 
+    The head of the International
+    ...
+    ----------------------------------------------------------------------------------------------------
+    Result 3 (Page 6):
+    tives crossed over to the Liber-
+    als in recent months. 
+    Keiko Fujimori advanced to the
+    second round of Peru’s presi-
+    dential election. It is her fourth
+    run for the office. Ms Fujimori
+    is the daughter ...
+    ----------------------------------------------------------------------------------------------------
+    ⋆˚꩜｡  Total Tokens: ~10.5
+    ≽^- ˕ -^≼ ᶻ 𝗓 𐰁 Total Cost: $0.000000
+
+    python3 PDFEmbedding.py --pdf ./TheEconomistUK_1804_9-10.pdf
+    PDF with hash 3b06c4bb2bf55df94070c5fbb596e08 found in local cache. Skipping embedding.
+
+    Question: What is the main summary of this document?
+
+    --- Top Relevant Chunks from PDF ---
+    Result 1 (Page 0):
+    Leaders 9The Economist April 18th 2026
+    /uni23E9
+    S
+    HOULD A HANDFUL of men be entrusted with the world’s
+    most potent new technology? Five geeks so famous that
+    they can be identiﬁed by their ﬁrst names—D...
+    ----------------------------------------------------------------------------------------------------
+    ⋆˚꩜｡  Total Tokens: ~10.5
+    ≽^- ˕ -^≼ ᶻ 𝗓 𐰁 Total Cost: $0.000000
+    ```
 
 ### 1.2 Look inside the database
 
@@ -54,10 +180,9 @@ This section describes how the data is stored within the PostgreSQL database usi
     ![Embedding Table](images/03.png)
 
 ## 2. Query from Vector Database
-A RAG agent first retrieves relevant data from a vector database and then forwards it to the LLM to generate a response.  
-- ![RAg agent](images/06.png)
+To query a vector database, use `.similarity_search()` to return documents directly, or use `.as_retriever()` to integrate the search logic into an AI agent or chain.
 
-- example:
+- example of chat agent:
     ![Querying the Vector Database](images/02.png)
 
 - 🌈 compare similarity_search and as_retriever
@@ -141,7 +266,8 @@ A RAG agent first retrieves relevant data from a vector database and then forwar
             v
         [ LIST OF DOCUMENTS ]
     ```
-## 3. Useful query
+
+## 3. Useful queries
 - delete an embedded PDF
   ```sql
     -- This deletes all chunks belonging to a specific file
@@ -163,7 +289,7 @@ A RAG agent first retrieves relevant data from a vector database and then forwar
 ## 4. Issues and open questions
 ### 4.1 "Lost in the Middle" Phenomenon
 **A Retrieval Gap**  
-- **Symtom**  
+- **Symptom**  
     ```bash
     python3 chat.py 
     What would you like to know from the PDF? generate questions and their answers to revise chapter 3
