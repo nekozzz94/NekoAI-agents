@@ -47,27 +47,26 @@ def ingest_pdf(file_path):
     # Step 2: Chunk the Text
     # PDFs have complex layouts. Overlap helps maintain context between chunks.
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=150,
-        add_start_index=True # Keeps track of which page/char the text came from
+        chunk_size=1000,                        # Increase to 1000-1500 for better semantic "units"
+        chunk_overlap=200,                      # Maintain ~15-20% overlap to prevent cutting mid-sentence
+        add_start_index=True                    # Keeps track of which page/char the text came from
     )
     chunks = text_splitter.split_documents(pages)
     calculate_ingestion_cost(chunks)
 
     print(f"Split PDF into {len(chunks)} chunks.")
 
-    # Step 3: Connect to Postgres and Add Documents
-    vector_store = PGVector(
-        embeddings=embeddings,
-        collection_name=COLLECTION_NAME,
-        connection=CONNECTION_STRING,
-        use_jsonb=True,
-    )
+    try:
+        # Step 3: Connect to Postgres and Add Documents
+        vector_store = get_vector()
+        vector_store.add_documents(chunks)
+        print("Successfully stored PDF embeddings in Postgres!")
+        return vector_store
+    except Exception as e:
+       print("[!] vector_store.add_documents errors")
+       print(str(e))
+       os._exit(1)
     
-    vector_store.add_documents(chunks)
-    print("Successfully stored PDF embeddings in Postgres!")
-    return vector_store
-
 def get_vector():
     vector_store = PGVector(
         embeddings=embeddings,

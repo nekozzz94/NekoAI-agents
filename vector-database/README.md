@@ -18,9 +18,10 @@ A practical guide to leveraging vector databases as external knowledge sources f
     - [1.1 Embedding](#11-embedding)
     - [1.2 Look inside the database](#12-look-inside-the-database)
   - [2. Query from Vector Database](#2-query-from-vector-database)
-  - [3. Issues and open questions](#3-issues-and-open-questions)
-    - [3.1 "Lost in the Middle" Phenomenon](#31-lost-in-the-middle-phenomenon)
-    - [3.2 up-to-date the document with latest version (?)](#32-up-to-date-the-document-with-latest-version-)
+  - [3. Useful query](#3-useful-query)
+  - [4. Issues and open questions](#4-issues-and-open-questions)
+    - [4.1 "Lost in the Middle" Phenomenon](#41-lost-in-the-middle-phenomenon)
+    - [4.2 up-to-date the document with latest version (?)](#42-up-to-date-the-document-with-latest-version-)
 
 ## 1. Embedding pipeline
 ### 1.1 Embedding
@@ -140,14 +141,31 @@ A RAG agent first retrieves relevant data from a vector database and then forwar
             v
         [ LIST OF DOCUMENTS ]
     ```
-## 3. Issues and open questions
-### 3.1 "Lost in the Middle" Phenomenon
+## 3. Useful query
+- delete an embedded PDF
+  ```sql
+    -- This deletes all chunks belonging to a specific file
+    DELETE FROM langchain_pg_embedding
+    WHERE cmetadata->>'source' = '../TheEconomist_2504.pdf';
+  ```
+- drop a collection
+  ```sql
+    -- 1. Find the UUID of your collection
+    SELECT uuid FROM langchain_pg_collection WHERE name = 'your_old_collection_name';
+
+    -- 2. Delete the embeddings linked to that UUID
+    DELETE FROM langchain_pg_embedding 
+    WHERE collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = 'your_old_collection_name');
+
+    -- 3. Delete the collection entry itself
+    DELETE FROM langchain_pg_collection WHERE name = 'your_old_collection_name';
+  ```
+## 4. Issues and open questions
+### 4.1 "Lost in the Middle" Phenomenon
 **A Retrieval Gap**  
 - **Symtom**  
     ```bash
     python3 chat.py 
-    Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
-    Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
     What would you like to know from the PDF? generate questions and their answers to revise chapter 3
 
     --- AI Agent is thinking ---
@@ -189,8 +207,6 @@ A RAG agent first retrieves relevant data from a vector database and then forwar
  - **After fix**  
     ```bash
     python3 chat.py 
-    Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
-    Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
     What would you like to know from the PDF? generate 10 questions and their answers to revise chapter 3
 
     --- AI Agent is thinking ---
@@ -228,4 +244,4 @@ A RAG agent first retrieves relevant data from a vector database and then forwar
     10. **Question:** What is the final sub-topic discussed under FAISS Indexes in the provided context for Chapter 3?
         **Answer:** Choosing the Right Index.
     ```
-### 3.2 up-to-date the document with latest version (?)
+### 4.2 up-to-date the document with latest version (?)

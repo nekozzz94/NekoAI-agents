@@ -1,7 +1,5 @@
 import os
 
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_postgres import PGVector
 from langchain_postgres.vectorstores import PGVector
@@ -45,14 +43,17 @@ def calculate_cost(input_tokens, output_tokens):
     return input_cost + output_cost
 
 def get_vector():
-    vector_store = PGVector(
-        embeddings=embeddings,
-        collection_name=COLLECTION_NAME,
-        connection=CONNECTION_STRING,
-        use_jsonb=True,
-    )
-
-    return vector_store
+    try:
+        vector_store = PGVector(
+            embeddings=embeddings,
+            collection_name=COLLECTION_NAME,
+            connection=CONNECTION_STRING,
+            use_jsonb=True,
+        )
+        return vector_store
+    except Exception as e:
+        print("get_vector errors")
+        print(str(e))
 
 def ask_agent(query):
     vector_store = get_vector()
@@ -65,12 +66,11 @@ def ask_agent(query):
     You are a helpful assistant. Use the following pieces of retrieved context 
     from a PDF document to answer the question. 
     If you don't know the answer based on the context, just say you don't know.
-    
     Context:
     {context}
-    
+
     Question: {question}
-    
+
     Answer:
     """
     prompt = ChatPromptTemplate.from_template(template)
@@ -85,8 +85,14 @@ def ask_agent(query):
     )
 
     print(f"\n--- AI Agent is thinking ---")
-    # Invoke the RAG chain and get the response
-    response = rag_chain.invoke(query)
+
+    try:
+        # Invoke the RAG chain and get the response
+        response = rag_chain.invoke(query)
+    except Exception as e:
+       print("[!] rag_chain.invoke errors")
+       print(str(e))
+       os._exit(1)
 
     # Get token usage from the LLM
     input_tokens = llm.get_num_tokens(prompt.format(context="", question=query))  # Approximate input tokens
@@ -112,3 +118,4 @@ if __name__ == "__main__":
         
     print("\n--- Final Answer ---")
     print(answer)
+    print("-"*100)
