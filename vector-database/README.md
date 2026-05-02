@@ -280,7 +280,27 @@ To query a vector database, use `.similarity_search()` to return documents direc
         [ LIST OF DOCUMENTS ]
     ```
 ### Example of a Chat Agent
-    ![Querying the Vector Database](images/02.png)  
+```bash
+python3 chat.py 
+What would you like to know from the TheEconomist? (Type 'exit' toquit)
+tells me 5 things about Mythos moment
+--- AI Agent is thinking ---
+--- Token Usage & Cost ---
+Input Tokens: 79
+Output Tokens: 78
+Estimated Cost: $0.000039
+--- Final Answer ---
+The "Mythos moment" is:
+1. A topic discussed in The Economist.
+2. Related to Artificial Intelligence (AI).
+3. Poses the question: "Can five men be trusted with AI?"
+4. Is a "leader" article on page 9.
+5. Is connected to America's government waking up to the dangers ofartificial intelligence.
+---------------------------------------------------------------------------------------------------
+What would you like to know from the TheEconomist? (Type 'exit' toquit)
+exit
+Exiting chat. Goodbye!
+```  
 
 ### Monitoring SQL Queries with `SQL_ECHO=1`  
 *Setting the `SQL_ECHO` environment variable to `1` enables SQLAlchemy's SQL echo, we can see the underlying SQL queries executed against the database.*  

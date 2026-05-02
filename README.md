@@ -8,7 +8,12 @@ Corrections and feedback are always welcome!
 </p>
 
 ## 🌈 General knowledge collection  
-TBD
+|No.|Topic|Content|
+|--|--|--|
+|00|[where the story start](docs/Init.md)|Explain LLM, agent, MCP, RAG in overview (Updating...)|
+|01|[Understand GCP](docs/GCP-gemini.md)|Understand GCP project and use Gemini models|
+|02|[Postgres](docs/postgres.md)|Maintenance postgres database which could be used as vector datbase with pgvector extension|
+
 ## 🌟 Practical examples  
 |No.|Topic|Content|
 |--|--|--|
