@@ -8,9 +8,6 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_postgres import PGVector
-from langchain_postgres.vectorstores import PGVector
-
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 CONNECTION_STRING = (
@@ -35,7 +32,7 @@ embeddings = GoogleGenerativeAIEmbeddings(
     model="models/gemini-embedding-2", output_dimensionality=768
 )
 engine = create_engine(
-    CONNECTION_STRING, echo=True if os.environ["SQL_ECHO"] == 1 else False
+    CONNECTION_STRING, echo=True if int(os.environ["SQL_ECHO"]) == 1 else False
 )
 
 
@@ -43,8 +40,8 @@ def calculate_embedding_cost(total_chars):
     # Approximation: 1 token = 4 characters
     total_tokens = total_chars / 4
     cost = (total_tokens / 1000) * COST_SHEET["gemini-embedding-2"]
-    print(f"⋆˚꩜｡  Total Tokens: ~{total_tokens}")
-    print(f"≽^- ˕ -^≼ ᶻ 𝗓 𐰁 Total Cost: ${cost:.6f}")
+    print(f"\n≽^- ˕ -^≼ ᶻ 𝗓 𐰁       Total Tokens: ~{total_tokens}")
+    print(f"⊹ ࣪ ﹏𓊝﹏𓂁﹏⊹ ࣪ ˖      Total Cost  : ${cost:.6f}\n")
 
 
 def get_vector():
@@ -150,7 +147,6 @@ def ingest_pdf(file_path):
 
     try:
         calculate_embedding_cost(sum(len(doc.page_content) for doc in chunks))
-
         # Step 3: Connect to Postgres and Add Documents
         vector_store.add_documents(chunks)
         print("Successfully stored PDF embeddings in Postgres!")
@@ -189,7 +185,7 @@ if __name__ == "__main__":
         store = ingest_pdf(pdf_path)
         if store:
             question = "What is the main summary of this document?"
-            ask_question(store, question)
             calculate_embedding_cost(len(question))
+            ask_question(store, question) 
     else:
         print(f"Error: Could not find {pdf_path}")

@@ -1,36 +1,39 @@
 # Vector Database as Source Knowledge for LLMs
 
-A practical guide to leveraging vector databases as external knowledge sources for LLMs. This project showcases semantic search and information retrieval through PDF document analysis and newspaper article summarization.  
+A practical guide to leveraging vector databases as external knowledge sources for Large Language Models (LLMs). This project showcases semantic search and information retrieval through PDF document analysis and newspaper article summarization.  
 
-### 🍀 Use Cases
+## ⋆˚꩜｡ Use Cases
 *   **Technical Revision:** Query complex textbooks to clarify concepts and retrieve specific technical definitions.
 *   **Media Analysis:** Summarize lengthy newspaper articles to extract key insights quickly.
   
-![alt text](images/00.png)
+*Illustrates the system overview*![alt text](images/00.png)    
 
 🌈 Highly recommended reading: [Vector Databases](https://www.oreilly.com/library/view/vector-databases/9781098177584/)
-## 🍀 Table of Contents
+## ᨐฅ Table of Contents
 
 - [Vector Database as Source Knowledge for LLMs](#vector-database-as-source-knowledge-for-llms)
-    - [🍀 Use Cases](#-use-cases)
-  - [🍀 Table of Contents](#-table-of-contents)
-  - [0. Setup](#0-setup)
-    - [0.1 Environment Variables (`.env`)](#01-environment-variables-env)
-    - [0.2 Package Dependencies](#02-package-dependencies)
-    - [0.3 Start a pgvector server](#03-start-a-pgvector-server)
-  - [1. Embedding pipeline](#1-embedding-pipeline)
-    - [1.1 Embedding](#11-embedding)
-    - [1.2 Look inside the database](#12-look-inside-the-database)
-  - [2. Query from Vector Database](#2-query-from-vector-database)
-  - [3. Useful queries](#3-useful-queries)
-  - [4. Issues and open questions](#4-issues-and-open-questions)
-    - [4.1 "Lost in the Middle" Phenomenon](#41-lost-in-the-middle-phenomenon)
-    - [4.2 up-to-date the document with latest version (?)](#42-up-to-date-the-document-with-latest-version-)
+  - [⋆˚꩜｡ Use Cases](#-use-cases)
+  - [ᨐฅ Table of Contents](#ᨐฅ-table-of-contents)
+  - [Setup](#setup)
+    - [Environment Variables (`.env`)](#environment-variables-env)
+    - [Package Dependencies](#package-dependencies)
+    - [Start a pgvector server](#start-a-pgvector-server)
+  - [Embedding PDF files and Usage](#embedding-pdf-files-and-usage)
+    - [1. Embedding Process](#1-embedding-process)
+    - [2. Inspecting the Database](#2-inspecting-the-database)
+  - [Querying the Vector Database](#querying-the-vector-database)
+    - [🌈 Compare `similarity_search()` and `as_retriever()`](#-compare-similarity_search-and-as_retriever)
+    - [Example of a Chat Agent](#example-of-a-chat-agent)
+    - [Monitoring SQL Queries with `SQL_ECHO=1`](#monitoring-sql-queries-with-sql_echo1)
+  - [Issues](#issues)
+    - [1. "Lost in the Middle" Phenomenon](#1-lost-in-the-middle-phenomenon)
+  - [Todo](#todo)
 
-## 0. Setup
-### 0.1 Environment Variables (`.env`)
-The following environment variables are necessary for running python scripts,  
-set them in your `.env` and source it before running.
+## Setup  
+Before diving deep into the vector database, let's go over the setup required for running the Python scripts. 
+
+### Environment Variables (`.env`)
+The following environment variables are necessary for running Python scripts. Set them in your `.env` file and source it before execution.
 
 | Variable              | Description                                                               |
 | :-------------------- | :------------------------------------------------------------------------ |
@@ -40,7 +43,7 @@ set them in your `.env` and source it before running.
 | `PDF_HASH_CACHE_FILE` | Path to the JSON file used for caching PDF hashes to avoid re-embedding. |
 | `SQL_ECHO`            | Set to `1` to enable SQLAlchemy SQL echo (for debugging), `0` to disable. |
 
-### 0.2 Package Dependencies
+### Package Dependencies
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -48,13 +51,26 @@ pip install langchain-postgres psycopg[binary] langchain-google-genai
 pip install pypdf
 ```
 
-### 0.3 Start a pgvector server
+### Start a pgvector server
 ```bash
 ./pg-setup.sh
 ```
+ 
+## Embedding PDF files and Usage 
+🌟 [PostgreSQL Database Maintenance](../docs/postgres.md)   
+🌟 LangChain Package Components
+|No.|Function|Description|
+|--|--|--|
+|01|[PGVector](https://docs.langchain.com/oss/python/integrations/vectorstores/pgvector)|An implementation of LangChain's vectorstore abstraction using Postgres as the backend and utilizing the pgvector extension.|
+|02|[PyPDFLoader](https://docs.langchain.com/oss/python/integrations/document_loaders/pypdfloader)|Loads PDF files into a list of `Document` objects, where each document represents a page.|
+|03|[RecursiveCharacterTextSplitter](https://reference.langchain.com/python/langchain-text-splitters/character/RecursiveCharacterTextSplitter)|Splits `Document` objects (pages) into smaller `chunks` based on specified `chunk_size` and `chunk_overlap`.|
+|04|[GoogleGenerativeAIEmbeddings](https://docs.langchain.com/oss/python/integrations/embeddings/google_generative_ai)|Provides access to the Google Gemini embedding model, which is used as a parameter for `PGVector` to generate vector representations of text.|
+|05|[ChatGoogleGenerativeAI](https://docs.langchain.com/oss/python/integrations/chat/google_generative_ai)|Provides access to Google's generative Gemini models, used for conversational AI agents.|  
 
-## 1. Embedding pipeline
-### 1.1 Embedding
+🌟 Gemini Models  
+- [gemini-embedding-2](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/embedding-2)
+- [gemini-2.5-flash](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash)
+### 1. Embedding Process
 This section demonstrates the process of embedding a PDF document into the vector database. 
  - The visual below illustrates the workflow:  
 
@@ -96,7 +112,7 @@ This section demonstrates the process of embedding a PDF document into the vecto
     +-----------------------+
     ```
 
-- output example:  
+- Output Example:  
     ```bash
     python3 PDFEmbedding.py --pdf ./TheEconomistUK_1804.pdf
     --- Loading PDF: ./TheEconomistUK_1804.pdf ---
@@ -158,20 +174,11 @@ This section demonstrates the process of embedding a PDF document into the vecto
     ≽^- ˕ -^≼ ᶻ 𝗓 𐰁 Total Cost: $0.000000
     ```
 
-### 1.2 Look inside the database
+### 2. Inspecting the Database
 
-This section describes how the data is stored within the PostgreSQL database using `PGVector`.
+This section describes how the data is stored within the PostgreSQL database.
 
-- A collection with the name `COLLECTION_NAME` is created on the `langchain_pg_collection` table, as shown below:
-
-    ```python
-        vector_store = PGVector(
-            embeddings=embeddings,
-            collection_name=COLLECTION_NAME,
-            connection=CONNECTION_STRING,
-            use_jsonb=True,
-        )
-    ```
+- A collection with the name `COLLECTION_NAME` is created in the `langchain_pg_collection` table, as shown below:
 
     ![Collection Table](images/04.png)
 
@@ -179,14 +186,20 @@ This section describes how the data is stored within the PostgreSQL database usi
 
     ![Embedding Table](images/03.png)
 
-## 2. Query from Vector Database
+## Querying the Vector Database  
 To query a vector database, use `.similarity_search()` to return documents directly, or use `.as_retriever()` to integrate the search logic into an AI agent or chain.
 
-- example of chat agent:
-    ![Querying the Vector Database](images/02.png)
+### 🌈 Compare `similarity_search()` and `as_retriever()`  
 
-- 🌈 compare similarity_search and as_retriever
-  - similarity_search
+| Feature            | `vector_store.similarity_search()`                 | `vector_store.as_retriever()`                                          |
+| :----------------- | :------------------------------------------------- | :--------------------------------------------------------------------- |
+| **Purpose**        | Directly perform a similarity search.              | Create a configurable retriever object for use in LangChain chains.    |
+| **Invocation**     | Immediate execution with `query` and `k` parameters. | Returns a `Runnable` object; actual search occurs on `.invoke()`.      |
+| **Flexibility**    | Less flexible; direct search.                      | Highly configurable (`search_type`, `search_kwargs`, etc.).             |
+| **Return Type**    | `List[Document]` (list of chunks).                 | `List[Document]` (list of chunks).                                     |
+| **Use Case**       | Ad-hoc, single similarity searches.                | Integrated into larger RAG chains, agents, and conversational flows. |
+| **Internals**      | Embeds query, generates SQL, executes, returns docs. | Internally calls `similarity_search` when invoked. |
+  - `similarity_search()` Workflow
     ```
             [ USER QUERY ] (String: "How do I...")
                 |
@@ -230,7 +243,7 @@ To query a vector database, use `.similarity_search()` to return documents direc
                 v
         [ LIST OF CHUNKS ] (Top 5 most relevant)
     ```
-  - as_retriever
+  - `as_retriever()` Workflow
 
     ```
         1. INITIALIZATION PHASE (Setup)
@@ -266,28 +279,72 @@ To query a vector database, use `.similarity_search()` to return documents direc
             v
         [ LIST OF DOCUMENTS ]
     ```
+### Example of a Chat Agent
+    ![Querying the Vector Database](images/02.png)  
 
-## 3. Useful queries
-- delete an embedded PDF
-  ```sql
-    -- This deletes all chunks belonging to a specific file
-    DELETE FROM langchain_pg_embedding
-    WHERE cmetadata->>'source' = '../TheEconomist_2504.pdf';
-  ```
-- drop a collection
-  ```sql
-    -- 1. Find the UUID of your collection
-    SELECT uuid FROM langchain_pg_collection WHERE name = 'your_old_collection_name';
+### Monitoring SQL Queries with `SQL_ECHO=1`  
+*Setting the `SQL_ECHO` environment variable to `1` enables SQLAlchemy's SQL echo, we can see the underlying SQL queries executed against the database.*  
 
-    -- 2. Delete the embeddings linked to that UUID
-    DELETE FROM langchain_pg_embedding 
-    WHERE collection_id = (SELECT uuid FROM langchain_pg_collection WHERE name = 'your_old_collection_name');
+- Run PDFEmbedding.py with `SQL_ECHO=1`:
 
-    -- 3. Delete the collection entry itself
-    DELETE FROM langchain_pg_collection WHERE name = 'your_old_collection_name';
-  ```
-## 4. Issues and open questions
-### 4.1 "Lost in the Middle" Phenomenon
+```bash
+export SQL_ECHO=1
+python3 PDFEmbedding.py --pdf /home/pooh/Downloads/TheEconomistUK_1804.pdf
+```
+
+- Below is an example of the output you might see, demonstrating the SQL queries generated and executed:
+
+```bash
+2026-05-02 10:48:47,591 INFO sqlalchemy.engine.Engine select pg_catalog.version()
+2026-05-02 10:48:47,592 INFO sqlalchemy.engine.Engine [raw sql] {}
+2026-05-02 10:48:47,593 INFO sqlalchemy.engine.Engine select current_schema()
+2026-05-02 10:48:47,593 INFO sqlalchemy.engine.Engine [raw sql] {}
+2026-05-02 10:48:47,593 INFO sqlalchemy.engine.Engine show standard_conforming_strings
+2026-05-02 10:48:47,593 INFO sqlalchemy.engine.Engine [raw sql] {}
+2026-05-02 10:48:47,595 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-02 10:48:47,595 INFO sqlalchemy.engine.Engine SELECT pg_advisory_xact_lock(1573678846307946496);CREATE EXTENSION IF NOT EXISTS vector;
+2026-05-02 10:48:47,595 INFO sqlalchemy.engine.Engine [generated in 0.00011s] {}
+2026-05-02 10:48:47,595 INFO sqlalchemy.engine.Engine COMMIT
+2026-05-02 10:48:47,600 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-02 10:48:47,602 INFO sqlalchemy.engine.Engine SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s::VARCHAR AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s::VARCHAR, %(param_2)s::VARCHAR, %(param_3)s::VARCHAR, %(param_4)s::VARCHAR, %(param_5)s::VARCHAR]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s::VARCHAR
+2026-05-02 10:48:47,602 INFO sqlalchemy.engine.Engine [generated in 0.00015s] {'table_name': 'langchain_pg_collection', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-05-02 10:48:47,603 INFO sqlalchemy.engine.Engine SELECT pg_catalog.pg_class.relname 
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace 
+WHERE pg_catalog.pg_class.relname = %(table_name)s::VARCHAR AND pg_catalog.pg_class.relkind = ANY (ARRAY[%(param_1)s::VARCHAR, %(param_2)s::VARCHAR, %(param_3)s::VARCHAR, %(param_4)s::VARCHAR, %(param_5)s::VARCHAR]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != %(nspname_1)s::VARCHAR
+2026-05-02 10:48:47,603 INFO sqlalchemy.engine.Engine [cached since 0.001696s ago] {'table_name': 'langchain_pg_embedding', 'param_1': 'r', 'param_2': 'p', 'param_3': 'f', 'param_4': 'v', 'param_5': 'm', 'nspname_1': 'pg_catalog'}
+2026-05-02 10:48:47,604 INFO sqlalchemy.engine.Engine COMMIT
+2026-05-02 10:48:47,607 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-02 10:48:47,608 INFO sqlalchemy.engine.Engine SELECT langchain_pg_collection.uuid AS langchain_pg_collection_uuid, langchain_pg_collection.name AS langchain_pg_collection_name, langchain_pg_collection.cmetadata AS langchain_pg_collection_cmetadata 
+FROM langchain_pg_collection 
+WHERE langchain_pg_collection.name = %(name_1)s::VARCHAR 
+ LIMIT %(param_1)s::INTEGER
+2026-05-02 10:48:47,608 INFO sqlalchemy.engine.Engine [generated in 0.00011s] {'name_1': 'TheEconomist', 'param_1': 1}
+2026-05-02 10:48:47,609 INFO sqlalchemy.engine.Engine COMMIT
+PDF with hash 0501d7b0e9487901f9a1f0b48c5d60d35290acfe5716440f0c682172eed2e155 found in local cache. Skipping embedding.
+
+≽^- ˕ -^≼ ᶻ 𝗓 𐰁       Total Tokens: ~10.5
+⊹ ࣪ ﹏𓊝﹏𓂁﹏⊹ ࣪ ˖      Total Cost  : $0.000000
+
+
+Question: What is the main summary of this document?
+2026-05-02 10:48:48,329 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-05-02 10:48:48,329 INFO sqlalchemy.engine.Engine SELECT langchain_pg_collection.uuid AS langchain_pg_collection_uuid, langchain_pg_collection.name AS langchain_pg_collection_name, langchain_pg_collection.cmetadata AS langchain_pg_collection_cmetadata 
+FROM langchain_pg_collection 
+WHERE langchain_pg_collection.name = %(name_1)s::VARCHAR 
+ LIMIT %(param_1)s::INTEGER
+2026-05-02 10:48:48,330 INFO sqlalchemy.engine.Engine [cached since 0.7215s ago] {'name_1': 'TheEconomist', 'param_1': 1}
+2026-05-02 10:48:48,333 INFO sqlalchemy.engine.Engine SELECT langchain_pg_embedding.id AS langchain_pg_embedding_id, langchain_pg_embedding.collection_id AS langchain_pg_embedding_collection_id, langchain_pg_embedding.embedding AS langchain_pg_embedding_embedding, langchain_pg_embedding.document AS langchain_pg_embedding_document, langchain_pg_embedding.cmetadata AS langchain_pg_embedding_cmetadata, langchain_pg_embedding.embedding <=> %(embedding_1)s AS distance 
+FROM langchain_pg_embedding JOIN langchain_pg_collection ON langchain_pg_embedding.collection_id = langchain_pg_collection.uuid 
+WHERE langchain_pg_embedding.collection_id = %(collection_id_1)s::UUID ORDER BY distance ASC 
+ LIMIT %(param_1)s::INTEGER
+2026-05-02 10:48:48,333 INFO sqlalchemy.engine.Engine [generated in 0.00046s] {'embedding_1': '[-0.0028502591885626316,0.02270953729748726,-0.009346078149974346,0.0013615189818665385,-0.013808928430080414,-0.003300690557807684,-0.05863662064075 ... (16054 characters truncated) ... 246,0.008078503422439098,0.01960768550634384,0.018838968127965927,-0.0376226007938385,0.006854148115962744,0.03453807532787323,-0.009696299210190773]', 'collection_id_1': UUID('71b3676e-8636-47e9-a2fb-196c32c41486'), 'param_1': 3}
+2026-05-02 10:48:48,337 INFO sqlalchemy.engine.Engine ROLLBACK
+```
+
+## Issues
+### 1. "Lost in the Middle" Phenomenon
 **A Retrieval Gap**  
 - **Symptom**  
     ```bash
@@ -304,13 +361,9 @@ To query a vector database, use `.similarity_search()` to return documents direc
     *   From Embeddings to Modern Language Models: The Transformer Connection
     *   Encoder-Only Transformers (BERT and Its Variants)
     *   Decoder-Only Transformers (GPT Family)
-    *   Encoder-Decoder Transformers (T5, BART)
-    *   Embedding Models: The Specialized Vector Generators
-    *   Distinction from Traditional Models
-    *   Role in Modern LLM Applications
-    *   Practical Applications and Use Cases
+    ...
     ```
-- **The Cause:** Your similarity_search is likely returning the "Chapter 3" header chunk because it's a perfect keyword match, but it isn't returning the next 10 chunks that actually contain the data.  
+- **The Cause:** Your `similarity_search` is likely returning the "Chapter 3" header chunk because it's a perfect keyword match, but it isn't returning the next 10 chunks that actually contain the data.  
   
 - **The Fix:**
   - Increase your K-value (the number of retrieved chunks).  
@@ -320,7 +373,7 @@ To query a vector database, use `.similarity_search()` to return documents direc
     retriever = vector_store.as_retriever(search_kwargs={"k": 15})
     ```
 
-  - redo the embedding with paramethers  
+  - Redo the embedding with adjusted parameters.  
   
     ```python
         text_splitter = RecursiveCharacterTextSplitter(
@@ -330,7 +383,7 @@ To query a vector database, use `.similarity_search()` to return documents direc
         )
     ``` 
 
- - **After fix**  
+ - **After Fix**  
     ```bash
     python3 chat.py 
     What would you like to know from the PDF? generate 10 questions and their answers to revise chapter 3
@@ -352,22 +405,10 @@ To query a vector database, use `.similarity_search()` to return documents direc
     4.  **Question:** What topic is covered on page 55 of Chapter 3?
         **Answer:** Vector Representations.
 
-    5.  **Question:** Where can you find information about "Distance Metrics" in Chapter 3?
-        **Answer:** Page 56.
-
-    6.  **Question:** What are "FAISS Indexes" and on what page are they introduced in Chapter 3?
-        **Answer:** FAISS Indexes are a type of index used for similarity search, and they are introduced on page 58.
-
-    7.  **Question:** Name at least three types of FAISS Indexes mentioned in Chapter 3.
-        **Answer:** Flat Indexes (Brute Force), IVF-Based Indexes, LSH-Based Indexes, HNSW-Based Indexes, Other Specialized Indexes, and Composite and Transformative Indexes. (Any three of these are correct).
-
-    8.  **Question:** Which type of FAISS Index is also referred to as "Brute Force"?
-        **Answer:** Flat Indexes.
-
-    9.  **Question:** What topic follows "Selection Heuristics" in Chapter 3?
-        **Answer:** FAISS Indexes.
-
-    10. **Question:** What is the final sub-topic discussed under FAISS Indexes in the provided context for Chapter 3?
-        **Answer:** Choosing the Right Index.
+    ...
     ```
-### 4.2 up-to-date the document with latest version (?)
+## Todo  
+|No.|Description|Status|
+|--|--|--|
+|01|Update the document with the latest version|Open|
+|02|Adjust RecursiveCharacterTextSplitter parameters and compare the results|Open|
