@@ -5,6 +5,7 @@ import base64
 
 from langchain_core.messages import HumanMessage
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 
@@ -24,7 +25,7 @@ if "GOOGLE_API_KEY" in os.environ and "GEMINI_API_KEY" in os.environ:
 # 1. Setup Models
 vision_model = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 embeddings = GoogleGenerativeAIEmbeddings(
-    model="models/gemini-embedding-2", output_dimensionality=3072
+    model="models/gemini-embedding-2", output_dimensionality=os.environ["OUTPUT_DIMENSIONALITY"]
 )
 engine = create_engine(
     CONNECTION_STRING, echo=True if int(os.environ["SQL_ECHO"]) == 1 else False
@@ -59,33 +60,39 @@ def embed_png_image(image_path):
             },
         ]
     )
+
     description = vision_model.invoke([message]).content
     print(f"[*] Generated Image Description: {description[:50]}...")
 
-    # 3. Create a Document with the description and image metadata
-    doc = Document(
-        page_content=description,
-        metadata={"source": image_path, "type": "image", "raw_base64": image_data}
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,       # Well within the 8192 token limit
+        chunk_overlap=200,     # Small overlap to keep context between chunks
+        length_function=len,
+        add_start_index=True,
     )
+
+    # 3. Create the initial full document
+    full_doc = Document(
+        page_content=description,
+        metadata={
+            "source": image_path, 
+            "type": "image"
+        }
+    )
+
+    # 4. Split the document into safe chunks
+    # Even if description is short, it returns a list with 1 item
+    image_chunks = text_splitter.split_documents([full_doc])
+
+    print(f"[+] Image split into {len(image_chunks)} chunks for embedding.")
+
+    calculate_chunk_tokens(image_chunks)
 
     # 4. Store in Postgres
     vector_store = get_vector(embeddings, engine, COLLECTION_NAME)
-    vector_store.add_documents([doc])
+    safe_ingest(vector_store, image_chunks, batch_size=10)
+
     print("[+] Image embedded successfully.")
-
-
-def ask_question(vector_store, query):
-    # Step 4: Perform Similarity Search
-    print(f"\n[?] Question: {query}")
-    docs = vector_store.similarity_search(query, k=5)
-
-    print("\n--- Top Relevant Chunks from IMG ---")
-    for i, doc in enumerate(docs):
-        page_num = doc.metadata.get("page", "Unknown")
-        print(f"Result {i+1} (Page {page_num}):")
-        print(f"{doc.page_content[:200]}...")  # Print first 200 chars
-        print("-" * 100)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="The Image Embedding-Pipeline")

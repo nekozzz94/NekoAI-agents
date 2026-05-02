@@ -23,23 +23,11 @@ if "GOOGLE_API_KEY" in os.environ and "GEMINI_API_KEY" in os.environ:
     del os.environ["GEMINI_API_KEY"]
 
 embeddings = GoogleGenerativeAIEmbeddings(
-    model="models/gemini-embedding-2", output_dimensionality=3072
+    model="models/gemini-embedding-2", output_dimensionality=os.environ["OUTPUT_DIMENSIONALITY"]
 )
 engine = create_engine(
     CONNECTION_STRING, echo=True if int(os.environ["SQL_ECHO"]) == 1 else False
 )
-
-def safe_ingest(vector_store, chunks, batch_size=10):
-    for i in range(0, len(chunks), batch_size):
-        batch = chunks[i:i + batch_size]
-        try:
-            vector_store.add_documents(batch)
-            print(f"Successfully added chunks {i} to {i + len(batch)}")
-            # 1-second pause to prevent API rate limiting
-            time.sleep(1) 
-        except Exception as e:
-            print(f"❌ Error at chunk {i}: {e}")
-
 
 def native_ingest(chunks):
     # 2. Get the collection_id (UUID) from the COLLECTION_NAME
@@ -119,7 +107,7 @@ def ingest_pdf(file_path):
     # Step 2: Chunk the Text
     # PDFs have complex layouts. Overlap helps maintain context between chunks.
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=2000,   # Approx 500 words
+        chunk_size=1000,   # Approx 500 words
         chunk_overlap=200, # Keep context between chunks
         length_function=len
     )
@@ -127,7 +115,7 @@ def ingest_pdf(file_path):
 
     # Filter out empty chunks before calculating cost and embedding
     chunks = [chunk for chunk in chunks if chunk.page_content.strip()]
-    # calculate_chunk_tokens(chunks)
+    calculate_chunk_tokens(chunks)
 
     print(f"Split PDF into {len(chunks)} chunks.")
 
@@ -153,20 +141,6 @@ def ingest_pdf(file_path):
         print(str(e))
         os._exit(1)
 
-
-def ask_question(vector_store, query):
-    # Step 4: Perform Similarity Search
-    print(f"\n[?] Question: {query}")
-    docs = vector_store.similarity_search(query, k=5)
-
-    print("\n--- Top Relevant Chunks from PDF ---")
-    for i, doc in enumerate(docs):
-        page_num = doc.metadata.get("page", "Unknown")
-        print(f"Result {i+1} (Page {page_num}):")
-        print(f"{doc.page_content[:200]}...")  # Print first 200 chars
-        print("-" * 100)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="The PDF Embedding-Pipeline")
     parser.add_argument("--pdf", type=str, help="Path to a PDF file.")
@@ -179,6 +153,6 @@ if __name__ == "__main__":
         if store:
             question = "What is the main summary of this document?"
             calculate_embedding_cost(len(question))
-            # ask_question(store, question) 
+            ask_question(store, question) 
     else:
         print(f"[!] Error: Could not find {pdf_path}")

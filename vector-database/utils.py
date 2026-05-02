@@ -1,4 +1,4 @@
-import os, hashlib, json
+import os, hashlib, json, time
 from langchain_postgres import PGVector
 from sqlalchemy import text
 from google import genai
@@ -107,7 +107,6 @@ def calculate_chunk_tokens(chunks):
         count = response.total_tokens
         total_tokens += count
         
-        # Validation Logic
         status = "✅ PASS" if count <= 8192 else "❌ OVER LIMIT"
         print(f"{i+1:<10} | {count:<10} | {status}")
 
@@ -118,3 +117,34 @@ def calculate_chunk_tokens(chunks):
         print("⚠️ WARNING: Total exceeds 20k batch limit. Use batch_size=10 in ingestion.")
     
     return total_tokens
+
+def safe_ingest(vector_store, chunks, batch_size=10):
+    for i in range(0, len(chunks), batch_size):
+        batch = chunks[i:i + batch_size]
+        try:
+            vector_store.add_documents(batch)
+            print(f"Successfully added chunks {i} to {i + len(batch)}")
+            # 1-second pause to prevent API rate limiting
+            time.sleep(1) 
+        except Exception as e:
+            print(f"❌ Error at chunk {i}: {e}")
+
+def ask_question(vector_store, query):
+    # Step 4: Perform Similarity Search
+    print(f"\n[?] Question: {query}")
+    docs = vector_store.similarity_search(query, k=os.environ["K"])
+
+    print("\n--- Top Relevant Chunks from PDF ---")
+    for i, doc in enumerate(docs):
+        page_num = doc.metadata.get("page", "Unknown")
+        print(f"Result {i+1} (Page {page_num}):")
+        print(f"{doc.page_content[:200]}...")  # Print first 200 chars
+        print("-" * 100)
+
+def format_docs(docs):
+    cleaned_docs = []
+    for d in docs:
+        # Create a copy of metadata without the heavy image data
+        metadata = {k: v for k, v in d.metadata.items() if k != "raw_base64"}
+        cleaned_docs.append(f"Content: {d.page_content}\nSource: {metadata.get('source')}")
+    return "\n\n".join(cleaned_docs)
