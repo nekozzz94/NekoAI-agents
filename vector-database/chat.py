@@ -51,7 +51,7 @@ def ask_agent(query):
 
 if __name__ == "__main__":
   while True:
-    user_query = input(f"What would you like to know from the {COLLECTION_NAME}? (Type 'exit' to quit)\n")
+    user_query = input(f"What would you like to know from the {os.environ["COLLECTION_NAME"]}? (Type 'exit' to quit)\n")
     if user_query.lower() == "exit":
       print("Exiting chat. Goodbye!")
       break
