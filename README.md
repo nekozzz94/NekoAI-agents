@@ -10,7 +10,7 @@ Corrections and feedback are always welcome!
 ## 🌈 General knowledge collection  
 |No.|Topic|Content|
 |--|--|--|
-|00|[where the story start](docs/Init.md)|Explain LLM, agent, MCP, RAG in overview (Updating...)|
+|00|[Short story about agent loop](docs/agent-reasoning-loop.pdf)|Explain LLM, agent, MCP, RAG in overview (Updating...)|
 |01|[Understand GCP](docs/GCP-gemini.md)|Understand GCP project and use Gemini models|
 |02|[Postgres](docs/postgres.md)|Maintenance postgres database which could be used as vector datbase with pgvector extension|
 
