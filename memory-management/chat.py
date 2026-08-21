@@ -5,6 +5,7 @@ from langchain_ollama import ChatOllama
 llm = ChatOllama(
     model="llama3.2:3b",
     temperature=0.3,
+    keep_alive="30m"
 )
 
 # Create a simple prompt template
