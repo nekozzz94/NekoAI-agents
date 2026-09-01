@@ -1,3 +1,5 @@
+.vscode
+.claude
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -170,5 +172,13 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.plan
+
 # PyPI configuration file
 .pypirc
+
+*key.json
