@@ -143,7 +143,7 @@ class MemoryManager:
         prompt = _SUMMARISE_PROMPT.format(conversation=conversation_text)
 
         try:
-            response = self._client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+            response = self._client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
             text = response.text.strip()
 
             topics: list[str] = []

@@ -4,12 +4,12 @@ Reference: "Managing Memory for AI Agents", Benjamin Labaschin
 
 Memory architecture (Labaschin taxonomy):
   ┌──────────────────────────────────────────────────────────────────┐
-  │  MEMORY TIER        │  STORE             │  LIFETIME            │
+  │  MEMORY TIER        │  STORE             │  LIFETIME             │
   ├──────────────────────────────────────────────────────────────────┤
-  │  In-Context (ADK)   │  ADK session       │  Current turn        │
-  │  Episodic           │  Firestore         │  Cross-session       │
-  │  Semantic           │  Firestore         │  Persistent (facts)  │
-  │  Procedural         │  ADK FunctionTools │  Always available    │
+  │  In-Context (ADK)   │  ADK session       │  Current turn         │
+  │  Episodic           │  Firestore         │  Cross-session        │
+  │  Semantic           │  Firestore         │  Persistent (facts)   │
+  │  Procedural         │  ADK FunctionTools │  Always available     │
   └──────────────────────────────────────────────────────────────────┘
 """
 

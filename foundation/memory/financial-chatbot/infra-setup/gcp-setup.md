@@ -225,7 +225,7 @@ import os, google.generativeai as genai
 from dotenv import load_dotenv
 load_dotenv()
 genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-r = genai.GenerativeModel('gemini-2.0-flash').generate_content('say ok')
+r = genai.GenerativeModel('gemini-3.6-flash').generate_content('say ok')
 print('Gemini:', r.text.strip())
 "
 
