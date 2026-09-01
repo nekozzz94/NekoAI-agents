@@ -1,28 +1,24 @@
 # NekoAI-agent:  
 <p align="center">
- <img src="./image.png">    
+ <img src="./img/image.png">    
 </p>
 <p align="center">
 ≽^⎚⩊⎚^≼ Documenting my journey into the world of AI Agents.  𓆝 𓆟 𓆞 𓆝 𓆟<br>
 Corrections and feedback are always welcome! 
 </p>
 
-## 🌈 General knowledge collection  
-|No.|Topic|Content|
+## 🌈 FOUNDATION 
+|#|TOPIC|DESCRIPTION|
 |--|--|--|
-|00|[Short story about agent loop](docs/agent-reasoning-loop.pdf)|Explain LLM, agent, MCP, RAG in overview (Updating...)|
-|01|[Understand GCP](docs/GCP-gemini.md)|Understand GCP project and use Gemini models|
-|02|[Postgres](docs/postgres.md)|Maintenance postgres database which could be used as vector datbase with pgvector extension|
+|00|[Read first](foundation/docs/ai-agent-explain.md)|Overview of AI agents: what they are and why they are necessary.|
+|01|[Setup GCP project and billing](foundation/docs/GCP-gemini.md)|Understand GCP project and use Gemini models|
+|02|[Postgres database](foundation/docs/postgres.md)|Maintenance postgres database which could be used as vector datbase with pgvector extension|
+|03|[Start using MCP - Your hands and foots](foundation/mcp/README.md) |<ul><li> MCP playwright<br><li>OpenAI client lib<br><li>Gemini API lib<br><li>Python asyncio |
+|04|[Chat with Telegram Bot - Your face](foundation/telegram-bot/README.md) |<ul><li> Money Lover MCP<br><li>Telegram Bot<br><li>Gemini API lib<br><li>Python asyncio |
+|05|[Start using Vector database - Your long-term memory](foundation/vector-database/README.md) |<ul><li> Vector database<br><li>Langchain package<br><li>Postgres pgvector<br><li>PGVector: add_documents, similarity_search, as_retriever<br><li>Compare `similarity_search` and `as_retriever`<br><li>[PostgreSQL Database Maintenance](foundation/docs/postgres.md) |
+|06|[Talk about memory](foundation/memory-management/README.md) *(Updating ...)*|<ul><li> Named-entity recognition (NER) |
 
-## 🌟 Practical examples  
-|No.|Topic|Content|
-|--|--|--|
-|01|[Introduction how to use MCP - Your hands and foots](mcp/README.md) |<ul><li> MCP playwright<br><li>OpenAI client lib<br><li>Gemini API lib<br><li>Python asyncio |
-|02|[Money lover Telegram Bot - Your face](telegram-bot/README.md) |<ul><li> Money Lover MCP<br><li>Telegram Bot<br><li>Gemini API lib<br><li>Python asyncio |
-|03|[Start using Vector database - Your long-term memory](vector-database/README.md) |<ul><li> Vector database<br><li>Langchain package<br><li>Postgres pgvector<br><li>PGVector: add_documents, similarity_search, as_retriever<br><li>Compare `similarity_search` and `as_retriever`<br><li>[PostgreSQL Database Maintenance](./docs/postgres.md) |
-|04|[Deep dive memory](./memory-management/README.md) |<ul><li> Named-entity recognition (NER) |
-
-## 🌳 Books and References  
-[1. Vector Databases](https://www.oreilly.com/library/view/vector-databases/9781098177584/)  
-[2. Embeddings model](https://ai.google.dev/gemini-api/docs/embeddings#task-types-embeddings-2)  
-[3. Managing Memory for AI Agents](https://www.oreilly.com/library/view/managing-memory-for/9798341661257/)
+## 🌳 BOOKS AND REFERENCES
+|BOOKS|DOCUMENTS|
+|--|--|
+|[Vector Databases](https://www.oreilly.com/library/view/vector-databases/9781098177584/)<br>[Managing Memory for AI Agents](https://www.oreilly.com/library/view/managing-memory-for/9798341661257/)|[Gemini Embeddings model](https://ai.google.dev/gemini-api/docs/embeddings#task-types-embeddings-2)|
