@@ -19,7 +19,8 @@ import os
 
 from google import genai
 from google.adk.agents import LlmAgent
-from google.adk.tools import FunctionTool
+from google.adk.tools import FunctionTool, google_search, url_context
+from google.genai.types import GenerateContentConfig, ToolConfig
 import google.auth
 from google.auth import impersonated_credentials
 from google.cloud import firestore
@@ -49,6 +50,12 @@ Guidelines:
 - Keep responses concise (3–5 sentences unless the user asks for detail).
 - Remember what the user has told you in previous sessions and reference it
   naturally (their income, goals, risk tolerance, etc.).
+- Use google_search to look up current market data, interest rates, financial
+  news, or any real-world information you are uncertain about or that may have
+  changed since your training.
+- Use url_context when the user shares a URL (article, report, product page)
+  and asks you to analyse or summarise it.
+- Always cite the source when you rely on web search results.
 """
 
 
@@ -64,11 +71,16 @@ def build_agent(memory_manager: MemoryManager) -> LlmAgent:
         model="gemini-3.6-flash",
         instruction=enriched_prompt,
         tools=[
+            google_search,
+            url_context,
             FunctionTool(calculate_budget),
             FunctionTool(calculate_savings_timeline),
             FunctionTool(suggest_investment_allocation),
             FunctionTool(analyze_expense_breakdown),
         ],
+        generate_content_config=GenerateContentConfig(
+            tool_config=ToolConfig(include_server_side_tool_invocations=True),
+        ),
         description="Personal financial advisor with persistent memory.",
     )
     return agent

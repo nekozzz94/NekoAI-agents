@@ -176,8 +176,11 @@ async def chat_loop(user_id: str) -> None:
                 new_message=user_message,
             ):
                 if event.is_final_response() and event.content and event.content.parts:
-                    full_response = event.content.parts[0].text
-                    console.print(Markdown(full_response))
+                    full_response = "".join(
+                        p.text for p in event.content.parts if p.text is not None
+                    )
+                    if full_response:
+                        console.print(Markdown(full_response))
 
             if full_response:
                 memory_manager.record_turn("assistant", full_response)

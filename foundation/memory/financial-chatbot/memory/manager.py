@@ -18,6 +18,7 @@ On session end    → summarise session → store as new episode
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from typing import Any
 
@@ -27,6 +28,12 @@ from google.cloud import firestore
 from .episodic import EpisodicMemory
 from .semantic import SemanticMemory
 
+logging.basicConfig(
+    filename="errors.log",
+    level=logging.ERROR,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+_logger = logging.getLogger(__name__)
 
 _EXTRACT_FACTS_PROMPT = """\
 You are a financial data extractor. Analyse the conversation excerpt below and
@@ -161,7 +168,7 @@ class MemoryManager:
                 turn_count=len(self._turns),
             )
         except Exception:
-            pass  # summary is best-effort
+            _logger.exception("Failed to summarise and store episode")
 
     # ------------------------------------------------------------------
     # Introspection helpers (for debug / rich display)
