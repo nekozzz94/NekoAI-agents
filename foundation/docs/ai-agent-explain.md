@@ -1,8 +1,6 @@
-![](./img/Agent-general.png)
+🌟 Before starting to implement an agent, let's go through the essential terms.
 
-Before starting to implement an agent, let's go through the essential terms.
-
-## TERMS
+### TERMS
 
 | # | TERM | EXPLANATION |
 |---|------|-------------|

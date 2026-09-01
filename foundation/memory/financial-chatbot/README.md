@@ -4,6 +4,8 @@
 
 A personal finance chatbot that demonstrates **all four memory tiers** from the book using Google ADK Python, Gemini 3.6 Flash, and GCP Firestore.
 
+![](../../docs/img/finbot-diagram-mem.png)
+
 ### Memory Architecture
 
 ```
