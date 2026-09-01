@@ -30,6 +30,7 @@ from tools.financial_tools import (
     analyze_expense_breakdown,
     calculate_budget,
     calculate_savings_timeline,
+    get_money_lover_transactions,
     suggest_investment_allocation,
 )
 
@@ -56,6 +57,8 @@ Guidelines:
 - Use url_context when the user shares a URL (article, report, product page)
   and asks you to analyse or summarise it.
 - Always cite the source when you rely on web search results.
+- Use get_money_lover_transactions when the user asks about their real spending,
+  transactions, or expenses from Money Lover. Ask for the date range if not provided.
 """
 
 
@@ -77,6 +80,7 @@ def build_agent(memory_manager: MemoryManager) -> LlmAgent:
             FunctionTool(calculate_savings_timeline),
             FunctionTool(suggest_investment_allocation),
             FunctionTool(analyze_expense_breakdown),
+            FunctionTool(get_money_lover_transactions),
         ],
         generate_content_config=GenerateContentConfig(
             tool_config=ToolConfig(include_server_side_tool_invocations=True),

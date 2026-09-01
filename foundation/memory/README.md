@@ -4,7 +4,7 @@ Examples of agent memory management methods.
 
 | Example | Stack | Memory technique |
 |---|---|---|
-| [Financial Chatbot](#1-financial-chatbot) | Google ADK · Gemini · Firestore | All 4 tiers (in-context, episodic, semantic, procedural) |
+| [Financial Chatbot](#1-finbot) | Google ADK · Gemini · Firestore | All 4 tiers (in-context, episodic, semantic, procedural) |
 | [HR NER Agent](#2-hr-ner-agent) | Ollama · llama3.2 · Pydantic | Named-entity recognition → structured intent routing |
 | [Ollama Chat](#3-ollama-chat) | LangChain · Ollama · llama3.2:3b | Basic in-context (single turn) |
 
@@ -12,11 +12,11 @@ Examples of agent memory management methods.
 
 ## 1. Financial Chatbot
 
-> `financial-chatbot/` · Google ADK + Gemini 3.6 Flash + GCP Firestore
+> `finbot/` · Google ADK + Gemini 3.6 Flash + GCP Firestore
 
 A personal finance chatbot demonstrating **all four memory tiers** from Labaschin Ch.3–6.
 
-See more detail in [finbot](financial-chatbot/README.md)
+See more detail in [finbot](finbot/README.md)
 
 ## 2. HR NER Agent
 

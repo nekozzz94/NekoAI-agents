@@ -48,6 +48,7 @@ console = Console()
 APP_NAME = "finbot"
 _QUIT_COMMANDS = {"quit", "exit", "bye", "/quit", "/exit"}
 _DEBUG_COMMANDS = {"/memory", "/profile", "/history"}
+_CLEAR_SCOPES = {"all", "episodic", "semantic", "working"}
 
 
 def _print_profile(memory_manager) -> None:
@@ -95,6 +96,40 @@ def _print_memory_debug(memory_manager) -> None:
     console.print()
 
 
+def _handle_clear_command(raw: str, memory_manager) -> None:
+    """Handle /clear [all|episodic|semantic|working]."""
+    parts = raw.strip().split()
+    scope = parts[1].lower() if len(parts) > 1 else "all"
+
+    if scope not in _CLEAR_SCOPES:
+        console.print(
+            f"[yellow]Unknown scope '{scope}'. "
+            f"Use: /clear [all | episodic | semantic | working][/yellow]"
+        )
+        return
+
+    scope_label = {
+        "all": "ALL memory (episodic history + semantic profile + working context)",
+        "episodic": "episodic memory (session history)",
+        "semantic": "semantic memory (financial profile)",
+        "working": "working memory (current session context)",
+    }[scope]
+
+    confirm = console.input(
+        f"[bold yellow]Clear {scope_label}? This cannot be undone. (yes/no):[/bold yellow] "
+    ).strip().lower()
+
+    if confirm not in {"yes", "y"}:
+        console.print("[dim]Cancelled.[/dim]")
+        return
+
+    result = memory_manager.clear_memory(scope)
+    console.print("[bold red]Memory cleared:[/bold red]")
+    for tier, detail in result.items():
+        console.print(f"  [red]•[/red] {tier}: {detail}")
+    console.print()
+
+
 def _handle_debug_command(cmd: str, memory_manager) -> None:
     if cmd == "/memory":
         _print_memory_debug(memory_manager)
@@ -126,7 +161,8 @@ async def chat_loop(user_id: str) -> None:
         f"[bold green]FinBot[/bold green] — Personal Financial Advisor\n"
         f"[dim]User: {user_id} | Session: {memory_manager.session_id[:8]}…\n"
         f"GCP project: {gcp_project} | Impersonating: {target_sa}[/dim]\n\n"
-        f"[bold]/memory[/bold] all tiers · [bold]/profile[/bold] financial facts · [bold]/history[/bold] past sessions · [bold]quit[/bold] to exit",
+        f"[bold]/memory[/bold] all tiers · [bold]/profile[/bold] financial facts · [bold]/history[/bold] past sessions\n"
+        f"[bold]/clear[/bold] [dim][all|episodic|semantic|working][/dim] clear memory · [bold]quit[/bold] to exit",
         title="Managing Memory for AI Agents — Labaschin",
         border_style="green",
     ))
@@ -158,6 +194,10 @@ async def chat_loop(user_id: str) -> None:
 
         if user_input.lower() in _DEBUG_COMMANDS:
             _handle_debug_command(user_input.lower(), memory_manager)
+            continue
+
+        if user_input.lower().startswith("/clear"):
+            _handle_clear_command(user_input, memory_manager)
             continue
 
         # Record user turn in working memory

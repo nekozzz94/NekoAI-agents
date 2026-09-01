@@ -174,6 +174,33 @@ class MemoryManager:
     # Introspection helpers (for debug / rich display)
     # ------------------------------------------------------------------
 
+    def clear_memory(self, scope: str = "all") -> dict[str, Any]:
+        """
+        Clear one or more memory tiers.
+
+        scope:
+          "all"      — working + episodic + semantic
+          "episodic" — episode history only
+          "semantic" — user profile only
+          "working"  — in-context turn log only (current session)
+        """
+        result: dict[str, Any] = {}
+
+        if scope in ("all", "working"):
+            count = len(self._turns)
+            self._turns.clear()
+            result["working"] = f"cleared {count} turn(s)"
+
+        if scope in ("all", "episodic"):
+            deleted = self.episodic.clear()
+            result["episodic"] = f"deleted {deleted} episode(s)"
+
+        if scope in ("all", "semantic"):
+            self.semantic.clear()
+            result["semantic"] = "profile deleted"
+
+        return result
+
     def get_working_memory_snapshot(self) -> list[dict[str, str]]:
         return list(self._turns)
 

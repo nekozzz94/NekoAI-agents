@@ -87,6 +87,14 @@ class EpisodicMemory:
             episodes.append(Episode(**data))
         return episodes
 
+    def clear(self) -> int:
+        """Delete all episode documents. Returns the number of deleted docs."""
+        deleted = 0
+        for doc in self._col.stream():
+            doc.reference.delete()
+            deleted += 1
+        return deleted
+
     def format_for_prompt(self, limit: int = 3) -> str:
         """Return a compact text block suitable for injecting into a system prompt."""
         episodes = self.get_recent_episodes(limit)

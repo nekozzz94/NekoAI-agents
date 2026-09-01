@@ -124,3 +124,7 @@ class SemanticMemory:
             payload["notes"] = current_notes[-20:]  # cap at 20 notes
 
         self._ref.set(payload, merge=True)
+
+    def clear(self) -> None:
+        """Delete the user profile document entirely."""
+        self._ref.delete()
