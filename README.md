@@ -1,6 +1,6 @@
 # NekoAI-agent:  
 <p align="center">
- <img src="./img/image.png">    
+ <img src="img/image.png">    
 </p>
 <p align="center">
 ≽^⎚⩊⎚^≼ Documenting my journey into the world of AI Agents.  𓆝 𓆟 𓆞 𓆝 𓆟<br>
