@@ -57,31 +57,46 @@ Guidelines:
 - Use url_context when the user shares a URL (article, report, product page)
   and asks you to analyse or summarise it.
 - Always cite the source when you rely on web search results.
+"""
+
+_MONEY_LOVER_PROMPT_ADDON = """\
 - Use get_money_lover_transactions when the user asks about their real spending,
   transactions, or expenses from Money Lover. Ask for the date range if not provided.
 """
 
 
-def build_agent(memory_manager: MemoryManager) -> LlmAgent:
+def build_agent(memory_manager: MemoryManager, include_money_lover: bool = False) -> LlmAgent:
     """
     Construct the ADK LlmAgent with Gemini and the financial tool set.
     The system prompt is enriched with the user's episodic + semantic memory.
+
+    Args:
+        memory_manager: The MemoryManager instance for this user.
+        include_money_lover: Whether to enable the Money Lover integration.
+                             Requires MONEY_LOVER_TOKEN in the environment.
     """
-    enriched_prompt = memory_manager.build_system_prompt(_BASE_SYSTEM_PROMPT)
+    base_prompt = _BASE_SYSTEM_PROMPT
+    if include_money_lover:
+        base_prompt = base_prompt + _MONEY_LOVER_PROMPT_ADDON
+
+    enriched_prompt = memory_manager.build_system_prompt(base_prompt)
+
+    tools = [
+        google_search,
+        url_context,
+        FunctionTool(calculate_budget),
+        FunctionTool(calculate_savings_timeline),
+        FunctionTool(suggest_investment_allocation),
+        FunctionTool(analyze_expense_breakdown),
+    ]
+    if include_money_lover:
+        tools.append(FunctionTool(get_money_lover_transactions))
 
     agent = LlmAgent(
         name="FinBot",
         model="gemini-3.6-flash",
         instruction=enriched_prompt,
-        tools=[
-            google_search,
-            url_context,
-            FunctionTool(calculate_budget),
-            FunctionTool(calculate_savings_timeline),
-            FunctionTool(suggest_investment_allocation),
-            FunctionTool(analyze_expense_breakdown),
-            FunctionTool(get_money_lover_transactions),
-        ],
+        tools=tools,
         generate_content_config=GenerateContentConfig(
             tool_config=ToolConfig(include_server_side_tool_invocations=True),
         ),
