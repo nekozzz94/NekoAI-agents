@@ -193,9 +193,15 @@ def calculate_savings_timeline(
         months += 1
 
     if months >= max_months:
+        if monthly_rate > 0:
+            min_contribution = math.ceil(
+                (savings_goal * monthly_rate) / (1 - (1 + monthly_rate) ** -max_months)
+            )
+        else:
+            min_contribution = math.ceil(savings_goal / max_months)
         return {
             "error": "Goal not reachable within 50 years with current contribution.",
-            "suggestion": f"You'd need at least {math.ceil((savings_goal * monthly_rate) / (1 - (1 + monthly_rate) ** -max_months)):,.0f} /month.",
+            "suggestion": f"You'd need at least {min_contribution:,.0f} /month.",
         }
 
     return {
