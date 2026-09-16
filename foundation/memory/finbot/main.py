@@ -36,7 +36,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
+from google.adk.sessions import DatabaseSessionService
 from google.genai.types import Content, Part
 
 from agent import build_agent, create_memory_manager
@@ -143,7 +143,16 @@ async def chat_loop(user_id: str, money_lover: bool = False) -> None:
     memory_manager = create_memory_manager(user_id)
     agent = build_agent(memory_manager, include_money_lover=money_lover)
 
-    session_service = InMemorySessionService()
+    db_url = os.environ.get("SESSION_DB_URL", "sqlite+aiosqlite:///finbot_sessions.db")
+    try:
+        session_service = DatabaseSessionService(db_url=db_url)
+        await session_service.prepare_tables()
+    except ValueError as exc:
+        console.print(f"[red]Error: invalid session DB configuration: {exc}[/red]")
+        sys.exit(1)
+    except Exception as exc:
+        console.print(f"[red]Error: could not initialise session database ({db_url}):\n  {exc}[/red]")
+        sys.exit(1)
     runner = Runner(
         agent=agent,
         app_name=APP_NAME,

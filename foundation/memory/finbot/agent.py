@@ -22,6 +22,8 @@ from google.adk.agents import LlmAgent
 from google.adk.tools import FunctionTool, google_search, url_context
 from google.genai.types import GenerateContentConfig, ToolConfig
 import google.auth
+import google.auth.exceptions
+import google.auth.transport.requests
 from google.auth import impersonated_credentials
 from google.cloud import firestore
 
@@ -135,6 +137,14 @@ def create_memory_manager(user_id: str) -> MemoryManager:
         target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
         lifetime=3600,
     )
+    try:
+        credentials.refresh(google.auth.transport.requests.Request())
+    except google.auth.exceptions.TransportError as exc:
+        raise SystemExit(
+            f"Error: could not impersonate service account '{target_sa}'.\n"
+            f"  {exc}\n"
+            "Ensure your account has roles/iam.serviceAccountTokenCreator on that SA."
+        ) from exc
     db = firestore.Client(project=gcp_project, credentials=credentials)
 
     return MemoryManager(db=db, gemini_client=client, user_id=user_id)
