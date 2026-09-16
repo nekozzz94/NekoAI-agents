@@ -35,6 +35,11 @@ from tools.financial_tools import (
     get_money_lover_transactions,
     suggest_investment_allocation,
 )
+from tools.sheets_reader import (
+    get_sheet_transactions,
+    analyze_sheet_spending,
+    detect_spending_trends,
+)
 
 # -----------------------------------------------------------------------
 # Base system prompt (semantic + episodic context injected at runtime)
@@ -66,8 +71,20 @@ _MONEY_LOVER_PROMPT_ADDON = """\
   transactions, or expenses from Money Lover. Ask for the date range if not provided.
 """
 
+_GOOGLE_SHEETS_PROMPT_ADDON = """\
+- Use get_sheet_transactions when the user asks about spending from their Google Sheet or
+  spreadsheet. Ask for the sheet URL and date range if not provided.
+- Use detect_spending_trends to identify if expenses are growing or shrinking over recent months.
+- Use analyze_sheet_spending for a full breakdown when the user wants to understand their budget
+  from their sheet data.
+"""
 
-def build_agent(memory_manager: MemoryManager, include_money_lover: bool = False) -> LlmAgent:
+
+def build_agent(
+    memory_manager: MemoryManager,
+    include_money_lover: bool = False,
+    include_google_sheets: bool = False,
+) -> LlmAgent:
     """
     Construct the ADK LlmAgent with Gemini and the financial tool set.
     The system prompt is enriched with the user's episodic + semantic memory.
@@ -76,10 +93,14 @@ def build_agent(memory_manager: MemoryManager, include_money_lover: bool = False
         memory_manager: The MemoryManager instance for this user.
         include_money_lover: Whether to enable the Money Lover integration.
                              Requires MONEY_LOVER_TOKEN in the environment.
+        include_google_sheets: Whether to enable the Google Sheets integration.
+                               Requires SHEETS_AUTH_MODE + GCP credentials.
     """
     base_prompt = _BASE_SYSTEM_PROMPT
     if include_money_lover:
         base_prompt = base_prompt + _MONEY_LOVER_PROMPT_ADDON
+    if include_google_sheets:
+        base_prompt = base_prompt + _GOOGLE_SHEETS_PROMPT_ADDON
 
     enriched_prompt = memory_manager.build_system_prompt(base_prompt)
 
@@ -93,6 +114,12 @@ def build_agent(memory_manager: MemoryManager, include_money_lover: bool = False
     ]
     if include_money_lover:
         tools.append(FunctionTool(get_money_lover_transactions))
+    if include_google_sheets:
+        tools.extend([
+            FunctionTool(get_sheet_transactions),
+            FunctionTool(analyze_sheet_spending),
+            FunctionTool(detect_spending_trends),
+        ])
 
     agent = LlmAgent(
         name="FinBot",

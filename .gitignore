@@ -183,3 +183,4 @@ cython_debug/
 .pypirc
 
 *key.json
+*.db

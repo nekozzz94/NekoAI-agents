@@ -139,9 +139,9 @@ def _handle_debug_command(cmd: str, memory_manager) -> None:
         _print_history(memory_manager)
 
 
-async def chat_loop(user_id: str, money_lover: bool = False) -> None:
+async def chat_loop(user_id: str, money_lover: bool = False, google_sheets: bool = False) -> None:
     memory_manager = create_memory_manager(user_id)
-    agent = build_agent(memory_manager, include_money_lover=money_lover)
+    agent = build_agent(memory_manager, include_money_lover=money_lover, include_google_sheets=google_sheets)
 
     db_url = os.environ.get("SESSION_DB_URL", "sqlite+aiosqlite:///finbot_sessions.db")
     try:
@@ -167,11 +167,13 @@ async def chat_loop(user_id: str, money_lover: bool = False) -> None:
     gcp_project = os.environ.get("GCP_PROJECT_ID", "not set")
     target_sa = os.environ.get("GCP_SA_EMAIL", f"finbot-sa@{gcp_project}.iam.gserviceaccount.com")
     ml_status = "[green]enabled[/green]" if money_lover else "[dim]disabled[/dim]"
+    gs_status = "[green]enabled[/green]" if google_sheets else "[dim]disabled[/dim]"
     console.print(Panel(
         f"[bold green]FinBot[/bold green] — Personal Financial Advisor\n"
         f"[dim]User: {user_id} | Session: {memory_manager.session_id[:8]}…\n"
         f"GCP project: {gcp_project} | Impersonating: {target_sa}[/dim]\n"
-        f"[dim]Money Lover integration: {ml_status}[/dim]\n\n"
+        f"[dim]Money Lover integration: {ml_status}[/dim]\n"
+        f"[dim]Google Sheets integration: {gs_status}[/dim]\n\n"
         f"[bold]/memory[/bold] all tiers · [bold]/profile[/bold] financial facts · [bold]/history[/bold] past sessions\n"
         f"[bold]/clear[/bold] [dim][all|episodic|semantic|working][/dim] clear memory · [bold]quit[/bold] to exit",
         title="Managing Memory for AI Agents — Labaschin",
@@ -266,6 +268,16 @@ def main() -> None:
             "copy the value after 'AuthJWT ' in the authorization header."
         ),
     )
+    parser.add_argument(
+        "--google-sheets",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable Google Sheets integration. "
+            "Set SHEETS_AUTH_MODE=sa (default) and share your sheet with the finbot SA email, "
+            "or set SHEETS_AUTH_MODE=oauth to use application-default credentials."
+        ),
+    )
     args = parser.parse_args()
 
     if not os.environ.get("GEMINI_API_KEY"):
@@ -278,7 +290,7 @@ def main() -> None:
             "The get_money_lover_transactions tool will fail at runtime.[/yellow]"
         )
 
-    asyncio.run(chat_loop(args.user, money_lover=args.money_lover))
+    asyncio.run(chat_loop(args.user, money_lover=args.money_lover, google_sheets=args.google_sheets))
 
 
 if __name__ == "__main__":
