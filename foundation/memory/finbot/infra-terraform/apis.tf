@@ -4,6 +4,7 @@ locals {
     "aiplatform.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com", # needed for Workload Identity
+    "sheets.googleapis.com",
   ]
 }
 

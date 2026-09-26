@@ -28,6 +28,12 @@ warnings.filterwarnings(
     category=UserWarning,
     module="google.adk",
 )
+warnings.filterwarnings(
+    "ignore",
+    message=".*authenticated using end user credentials.*quota project.*",
+    category=UserWarning,
+    module="google.auth._default",
+)
 
 from dotenv import load_dotenv
 from rich.console import Console
@@ -36,7 +42,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from google.adk.runners import Runner
-from google.adk.sessions import DatabaseSessionService
+from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
 
 from agent import build_agent, create_memory_manager
@@ -143,16 +149,7 @@ async def chat_loop(user_id: str, money_lover: bool = False, google_sheets: bool
     memory_manager = create_memory_manager(user_id)
     agent = build_agent(memory_manager, include_money_lover=money_lover, include_google_sheets=google_sheets)
 
-    db_url = os.environ.get("SESSION_DB_URL", "sqlite+aiosqlite:///finbot_sessions.db")
-    try:
-        session_service = DatabaseSessionService(db_url=db_url)
-        await session_service.prepare_tables()
-    except ValueError as exc:
-        console.print(f"[red]Error: invalid session DB configuration: {exc}[/red]")
-        sys.exit(1)
-    except Exception as exc:
-        console.print(f"[red]Error: could not initialise session database ({db_url}):\n  {exc}[/red]")
-        sys.exit(1)
+    session_service = InMemorySessionService()
     runner = Runner(
         agent=agent,
         app_name=APP_NAME,

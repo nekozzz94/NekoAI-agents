@@ -8,6 +8,7 @@ from .sheets_reader import (
     get_sheet_transactions,
     analyze_sheet_spending,
     detect_spending_trends,
+    get_drive_folder_transactions,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "get_sheet_transactions",
     "analyze_sheet_spending",
     "detect_spending_trends",
+    "get_drive_folder_transactions",
 ]

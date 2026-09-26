@@ -39,6 +39,7 @@ from tools.sheets_reader import (
     get_sheet_transactions,
     analyze_sheet_spending,
     detect_spending_trends,
+    get_drive_folder_transactions,
 )
 
 # -----------------------------------------------------------------------
@@ -72,8 +73,10 @@ _MONEY_LOVER_PROMPT_ADDON = """\
 """
 
 _GOOGLE_SHEETS_PROMPT_ADDON = """\
-- Use get_sheet_transactions when the user asks about spending from their Google Sheet or
-  spreadsheet. Ask for the sheet URL and date range if not provided.
+- Use get_sheet_transactions when the user asks about spending from a specific Google Sheet URL.
+  Ask for the sheet URL and date range if not provided.
+- Use get_drive_folder_transactions when the user asks about expenses from their Google Drive
+  folder (the folder URL is pre-configured via GOOGLE_DRIVE_FOLDER_URL). Ask only for the date range.
 - Use detect_spending_trends to identify if expenses are growing or shrinking over recent months.
 - Use analyze_sheet_spending for a full breakdown when the user wants to understand their budget
   from their sheet data.
@@ -119,6 +122,7 @@ def build_agent(
             FunctionTool(get_sheet_transactions),
             FunctionTool(analyze_sheet_spending),
             FunctionTool(detect_spending_trends),
+            FunctionTool(get_drive_folder_transactions),
         ])
 
     agent = LlmAgent(

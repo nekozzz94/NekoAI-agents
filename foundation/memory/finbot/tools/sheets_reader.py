@@ -36,6 +36,9 @@ _logger = logging.getLogger(__name__)
 _SPREADSHEET_ID_RE = re.compile(
     r"(?:spreadsheets/d/|^)([a-zA-Z0-9_-]{20,})"
 )
+_FOLDER_ID_RE = re.compile(
+    r"folders/([a-zA-Z0-9_-]{20,})"
+)
 
 _DATE_FORMATS = [
     "%Y-%m-%d",
@@ -52,6 +55,18 @@ _HEADER_SYNONYMS: dict[str, list[str]] = {
     "category": ["category", "danh mục", "danh muc", "type", "loại", "loai", "cat", "group"],
     "note":     ["note", "ghi chú", "ghi chu", "desc", "description", "memo", "details"],
 }
+
+
+def _extract_folder_id(url_or_id: str) -> str:
+    m = _FOLDER_ID_RE.search(url_or_id.strip())
+    if m:
+        return m.group(1)
+    if re.match(r"^[a-zA-Z0-9_-]{20,}$", url_or_id.strip()):
+        return url_or_id.strip()
+    raise ValueError(
+        f"Cannot extract folder ID from '{url_or_id}'. "
+        "Pass the full Google Drive folder URL or the bare folder ID."
+    )
 
 
 def _extract_spreadsheet_id(url_or_id: str) -> str:
@@ -105,6 +120,7 @@ def _build_credentials():
     """
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/drive.readonly",
         "https://www.googleapis.com/auth/cloud-platform",
     ]
     mode = os.environ.get("SHEETS_AUTH_MODE", "sa").lower()
@@ -281,17 +297,18 @@ def _fetch_transactions(
         headers, rows = _reader.fetch_rows(spreadsheet_id, sheet_name)
     except Exception as exc:
         msg = str(exc)
+        sa_email = os.environ.get(
+            "GCP_SA_EMAIL",
+            f"finbot-sa@{os.environ.get('GCP_PROJECT_ID', '<project>')}.iam.gserviceaccount.com",
+        )
+        if any(p in msg for p in ["has not been used", "accessNotConfigured", "API not enabled"]):
+            return {"error": "Sheets API is not enabled in the GCP project.", "raw_error": msg}
         if "403" in msg or "permission" in msg.lower():
-            sa_email = os.environ.get(
-                "GCP_SA_EMAIL",
-                f"finbot-sa@{os.environ.get('GCP_PROJECT_ID', '<project>')}.iam.gserviceaccount.com",
-            )
             return {
-                "error": (
-                    f"Permission denied. Share the Google Sheet with viewer access to: {sa_email}"
-                )
+                "error": f"Permission denied reading sheet. Share it with viewer access to: {sa_email}",
+                "raw_error": msg,
             }
-        return {"error": f"Failed to read sheet: {exc}"}
+        return {"error": f"Failed to read sheet: {exc}", "raw_error": msg}
 
     if not headers:
         return {"error": "The sheet appears to be empty."}
@@ -438,6 +455,122 @@ def analyze_sheet_spending(
         "expense_to_income_ratio": pct(total),
         "skipped_rows": result.get("skipped_rows", 0),
     }
+
+
+def get_drive_folder_transactions(
+    start_date: str,
+    end_date: str,
+    sheet_name: str = "",
+) -> dict:
+    """
+    Fetch and normalise financial transactions from all Google Sheets
+    in the Drive folder specified by the GOOGLE_DRIVE_FOLDER_URL env var.
+
+    Args:
+        start_date: Start of the date range in YYYY-MM-DD format (inclusive).
+        end_date: End of the date range in YYYY-MM-DD format (inclusive).
+        sheet_name: Tab name to read from each sheet. Leave empty to use the first tab.
+
+    Returns:
+        Dict with aggregated transaction list, per-category totals, and income/expense summary
+        across all spreadsheets found in the folder.
+    """
+    folder_url = os.environ.get("GOOGLE_DRIVE_FOLDER_URL", "")
+    if not folder_url:
+        return {"error": "GOOGLE_DRIVE_FOLDER_URL environment variable is not set."}
+
+    try:
+        folder_id = _extract_folder_id(folder_url)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    try:
+        from googleapiclient.discovery import build  # type: ignore
+        creds = _build_credentials()
+        drive_service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    except Exception as exc:
+        return {"error": f"Failed to build Drive service: {exc}"}
+
+    try:
+        resp = (
+            drive_service.files()
+            .list(
+                q=(
+                    f"'{folder_id}' in parents"
+                    " and mimeType='application/vnd.google-apps.spreadsheet'"
+                    " and trashed=false"
+                ),
+                fields="files(id, name)",
+                pageSize=100,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
+        files = resp.get("files", [])
+    except Exception as exc:
+        msg = str(exc)
+        sa_email = os.environ.get(
+            "GCP_SA_EMAIL",
+            f"finbot-sa@{os.environ.get('GCP_PROJECT_ID', '<project>')}.iam.gserviceaccount.com",
+        )
+        if any(p in msg for p in ["has not been used", "accessNotConfigured", "API not enabled"]):
+            return {"error": "Drive API is not enabled in the GCP project.", "raw_error": msg}
+        if "403" in msg or "permission" in msg.lower():
+            return {
+                "error": f"Permission denied accessing Drive folder. Ensure it is shared with: {sa_email}",
+                "raw_error": msg,
+            }
+        return {"error": f"Failed to list Drive folder: {exc}", "raw_error": msg}
+
+    if not files:
+        return {
+            "error": f"No Google Sheets found in Drive folder (ID: {folder_id}).",
+            "folder_id": folder_id,
+        }
+
+    all_transactions: list[dict] = []
+    all_skipped = 0
+    by_category: dict[str, float] = {}
+    sheet_errors: list[str] = []
+
+    for f in files:
+        result = _fetch_transactions(f["id"], start_date, end_date, sheet_name)
+        if "error" in result:
+            sheet_errors.append(f"{f['name']}: {result['error']}")
+            _logger.warning("Skipping sheet %r: %s", f["name"], result["error"])
+            continue
+        all_transactions.extend(result.get("transactions", []))
+        all_skipped += result.get("skipped_rows", 0)
+        for cat, amt in result.get("by_category", {}).items():
+            by_category[cat] = round(by_category.get(cat, 0) + amt, 2)
+
+    if not all_transactions and sheet_errors:
+        return {
+            "error": "All sheets failed to load.",
+            "details": sheet_errors,
+            "folder_id": folder_id,
+        }
+
+    total_income = sum(t["amount"] for t in all_transactions if t["amount"] > 0)
+    total_expense = sum(t["amount"] for t in all_transactions if t["amount"] < 0)
+
+    output: dict = {
+        "period": {"start": start_date, "end": end_date},
+        "folder_id": folder_id,
+        "sheets_found": len(files),
+        "sheets_read": len(files) - len(sheet_errors),
+        "transaction_count": len(all_transactions),
+        "skipped_rows": all_skipped,
+        "total_income": round(total_income, 2),
+        "total_expense": round(total_expense, 2),
+        "net": round(total_income + total_expense, 2),
+        "by_category": by_category,
+        "transactions": all_transactions,
+    }
+    if sheet_errors:
+        output["sheet_errors"] = sheet_errors
+    return output
 
 
 def detect_spending_trends(
