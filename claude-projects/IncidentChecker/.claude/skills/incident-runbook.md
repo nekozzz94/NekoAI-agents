@@ -31,9 +31,33 @@ When this skill is invoked:
 3. If the incident is resolved:
    - Generate a **post-mortem document** ready for stakeholder review
 
-4. Write the document to a file named:
-   - `runbooks/YYYY-MM-DD-<slug>.md` for post-mortems
-   - `runbooks/runbook-<pattern-name>.md` for reusable runbooks
+4. Write the document to `incidents/YYYY-MM-DD-<slug>.md` (e.g. `incidents/2026-09-30-TICKET-12345-cloud-sql-quota.md`).
+
+5. After writing the runbook, record the incident to long-term memory:
+
+   ```bash
+   python3 scripts/memory_manager.py add-incident --stdin << 'EOF'
+   {
+     "id": "<jira-key>",
+     "title": "<short title>",
+     "severity": "P1|P2|P3",
+     "platform": "gcp|k8s|aws|terraform",
+     "affected_services": ["<service>"],
+     "symptoms": ["<observed symptom>"],
+     "root_cause": "<precise explanation>",
+     "root_cause_category": "<pattern-category>",
+     "resolution": "<steps taken>",
+     "environment": "prod|test|uat",
+     "duration_minutes": <N>,
+     "detection": "alert|user report|monitoring",
+     "runbook_file": "incidents/<filename>.md",
+     "lessons": "<prevention action>"
+   }
+   EOF
+   python3 scripts/memory_manager.py add-pattern --category <root_cause_category> --stdin << 'EOF'
+   {"seen_count": 1, "symptoms": ["<any new symptom>"]}
+   EOF
+   ```
 
 ## Output Template
 

@@ -1,0 +1,400 @@
+{
+  "_meta": {
+    "description": "Semantic memory: known incident failure patterns learned from past incidents. Each pattern maps a symptom category to root cause hypotheses, first checks, and proven resolutions. platform field: gcp | k8s | aws | terraform",
+    "last_updated": "2024-01-01"
+  },
+  "patterns": {
+    "ssl-cert-expiry": {
+      "platform": "gcp",
+      "title": "SSL Certificate Expiry",
+      "symptoms": [
+        "TLS handshake failure",
+        "ERR_CERT_DATE_INVALID",
+        "certificate expired",
+        "503 on HTTPS",
+        "SSL_ERROR_RX_RECORD_TOO_LONG"
+      ],
+      "likely_root_cause": "Certificate reached expiry date without renewal",
+      "first_checks": [
+        "gcloud certificate-manager certificates list --format='table(name,state,expireTime)'",
+        "gcloud compute ssl-certificates list --format='table(name,managed.status,managed.expireTime)'",
+        "curl -vI https://<HOST> 2>&1 | grep -E 'expire|issuer|subject'"
+      ],
+      "resolution": "Renew certificate via Certificate Manager or update the SSL cert resource in Terraform and re-attach to the load balancer frontend/backend",
+      "prevention": "Add a Cloud Monitoring alert for certificate expiry within 30 days",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "oom-memory-leak": {
+      "platform": "k8s",
+      "title": "OOMKill from Memory Leak",
+      "symptoms": [
+        "OOMKilled",
+        "pod restarts",
+        "intermittent 502 / 503",
+        "connection reset",
+        "CrashLoopBackOff after sustained load"
+      ],
+      "likely_root_cause": "Application memory leak causes container to exceed limits; if minReplicas=1 the single restart creates a SPOF window",
+      "first_checks": [
+        "kubectl describe pod <POD> -n <NS> | grep -A5 'Last State'",
+        "kubectl top pods -n <NS>",
+        "kubectl get hpa -n <NS>",
+        "kubectl logs <POD> -n <NS> --previous --tail=100"
+      ],
+      "resolution": "1. Increase memory limit as short-term fix. 2. Set minReplicas >= 2. 3. Deploy patched image with memory leak fix.",
+      "prevention": "Set minReplicas >= 2 for all prod workloads. Add OOMKill alert per pod via Cloud Monitoring or kube-state-metrics.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "crashloopbackoff-config": {
+      "platform": "k8s",
+      "title": "CrashLoopBackOff from Bad Configuration",
+      "symptoms": [
+        "CrashLoopBackOff",
+        "exit code 1",
+        "config not found",
+        "env var missing",
+        "secret not found"
+      ],
+      "likely_root_cause": "Missing or invalid environment variable, ConfigMap key, or Secret causing the application to fail at startup",
+      "first_checks": [
+        "kubectl describe pod <POD> -n <NS>",
+        "kubectl logs <POD> -n <NS> --previous --tail=50",
+        "kubectl get configmap <CM> -n <NS> -o yaml",
+        "kubectl get secret <SECRET> -n <NS> -o yaml | grep -v 'data:' | head -30"
+      ],
+      "resolution": "Fix the misconfigured resource (env var, ConfigMap, Secret) and redeploy. Use 'kubectl rollout restart' to pick up the fix.",
+      "prevention": "Add startup probe validation. Use schema validation for ConfigMaps in CI.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "imagepullbackoff": {
+      "platform": "k8s",
+      "title": "ImagePullBackOff",
+      "symptoms": [
+        "ImagePullBackOff",
+        "ErrImagePull",
+        "image not found",
+        "unauthorized",
+        "registry unreachable"
+      ],
+      "likely_root_cause": "Image tag does not exist in registry, registry credentials expired, or network connectivity to registry is broken",
+      "first_checks": [
+        "kubectl describe pod <POD> -n <NS> | grep -A10 Events",
+        "kubectl get secret <REGISTRY_SECRET> -n <NS>",
+        "gcloud artifacts docker images list <REGISTRY>/<REPO> --limit=10"
+      ],
+      "resolution": "1. Verify image tag exists. 2. Refresh registry credentials (image pull secret). 3. Check network path to registry (firewall, NAT).",
+      "prevention": "Pin image tags in deployments; never use 'latest' in prod. Set up registry credential rotation.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "node-notready": {
+      "platform": "k8s",
+      "title": "Node NotReady",
+      "symptoms": [
+        "Node NotReady",
+        "node pressure",
+        "DiskPressure",
+        "MemoryPressure",
+        "kubelet not posting node status",
+        "pods pending on node"
+      ],
+      "likely_root_cause": "Kubelet stopped posting status due to disk pressure, memory pressure, network plugin failure, or node OS issue",
+      "first_checks": [
+        "kubectl get nodes -o wide",
+        "kubectl describe node <NODE> | grep -A20 Conditions",
+        "kubectl top nodes",
+        "gcloud compute instances describe <NODE_NAME> --zone=<ZONE>"
+      ],
+      "resolution": "1. For disk pressure: clean up logs/tmp or expand disk. 2. For memory: cordon + drain + restart kubelet. 3. For network plugin: restart DaemonSet. 4. For persistent issue: drain node and delete from node pool.",
+      "prevention": "Set disk and memory alerts per node. Use cluster autoscaler so unhealthy nodes are replaced automatically.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "hpa-not-scaling": {
+      "platform": "k8s",
+      "title": "HPA Not Scaling",
+      "symptoms": [
+        "HPA not scaling",
+        "metrics unavailable",
+        "unable to fetch metrics",
+        "pods at max but load still high"
+      ],
+      "likely_root_cause": "metrics-server not running, custom metrics adapter missing, HPA min/max bounds wrong, or resource requests not set on pods",
+      "first_checks": [
+        "kubectl get hpa -n <NS>",
+        "kubectl describe hpa <HPA> -n <NS>",
+        "kubectl get pods -n kube-system | grep metrics-server",
+        "kubectl top pods -n <NS>"
+      ],
+      "resolution": "1. Restart metrics-server if down. 2. Verify pods have CPU/memory requests set. 3. Check HPA minReplicas/maxReplicas bounds. 4. For custom metrics: check adapter pod and metric pipeline.",
+      "prevention": "Always set resource requests on pods. Test HPA behavior in staging with a load test.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "cloud-sql-connectivity": {
+      "platform": "gcp",
+      "title": "Cloud SQL Connectivity Failure",
+      "symptoms": [
+        "connection refused to database",
+        "Cloud SQL auth proxy error",
+        "FATAL: password authentication failed",
+        "cannot connect to postgres",
+        "dial tcp timeout"
+      ],
+      "likely_root_cause": "Cloud SQL auth proxy misconfiguration, IAM binding missing for service account, instance in wrong state, or VPC private IP connectivity issue",
+      "first_checks": [
+        "gcloud sql instances list",
+        "gcloud sql instances describe <INSTANCE> --format='yaml(state,ipAddresses,settings.ipConfiguration)'",
+        "kubectl logs <POD_WITH_PROXY> -n <NS> -c cloudsql-proxy",
+        "gcloud projects get-iam-policy <PROJECT> --flatten='bindings[].members' | grep <SA>"
+      ],
+      "resolution": "1. Check proxy sidecar logs for auth errors. 2. Ensure SA has 'roles/cloudsql.client'. 3. Verify instance is RUNNABLE. 4. Check private IP / VPC peering.",
+      "prevention": "Add Cloud SQL instance state alert. Test connectivity from a new pod before deploying.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "quota-exhaustion": {
+      "platform": "gcp",
+      "title": "GCP Quota Exhaustion",
+      "symptoms": [
+        "RESOURCE_EXHAUSTED",
+        "quota exceeded",
+        "insufficient quota",
+        "pods pending due to node scale-up failure",
+        "autoscaler cannot add nodes"
+      ],
+      "likely_root_cause": "Regional or project-level quota for CPUs, IPs, or disk reached; autoscaler cannot provision new nodes",
+      "first_checks": [
+        "gcloud compute project-info describe --format='yaml(quotas)' | grep -B1 -A1 'usage.*limit\\|CRITICAL'",
+        "gcloud compute regions describe <REGION> --format='yaml(quotas)'",
+        "gcloud container operations list --limit=10 | grep -i fail"
+      ],
+      "resolution": "1. Request quota increase via GCP console (IAM & Admin \u2192 Quotas). 2. Short-term: reduce replica count or reschedule workloads to a region with headroom.",
+      "prevention": "Set Cloud Monitoring alerts at 80% quota utilisation for CPUs and external IPs.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "aws-iam-access-denied": {
+      "platform": "aws",
+      "title": "AWS IAM Access Denied",
+      "symptoms": [
+        "AccessDenied",
+        "UnauthorizedOperation",
+        "is not authorized to perform",
+        "not authorized to assume role",
+        "cross-account assume-role fails"
+      ],
+      "likely_root_cause": "Missing or misconfigured IAM policy on the role/user, trust policy not including the source principal, or resource-based policy conflict",
+      "first_checks": [
+        "aws sts get-caller-identity",
+        "aws iam list-attached-role-policies --role-name <ROLE>",
+        "aws iam simulate-principal-policy --policy-source-arn <ROLE_ARN> --action-names <ACTION> --resource-arns <RESOURCE_ARN>",
+        "aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=AssumeRole --max-results 20 --output json | jq '.Events[] | {time:.EventTime,user:.Username}'"
+      ],
+      "resolution": "1. Use IAM Policy Simulator to confirm the denied action. 2. Attach the missing policy or fix the trust policy. 3. For cross-account: verify trust policy includes the source account principal.",
+      "prevention": "Enable CloudTrail in all regions. Set up IAM Access Analyzer to detect overly permissive and unused policies.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "aws-alb-unhealthy-targets": {
+      "platform": "aws",
+      "title": "AWS ALB Unhealthy Targets (502/503)",
+      "symptoms": [
+        "502 Bad Gateway",
+        "503 Service Unavailable",
+        "504 Gateway Timeout",
+        "no healthy targets",
+        "target health check failing"
+      ],
+      "likely_root_cause": "Target instances/containers failing health checks due to app crash, security group blocking the health check port, or wrong health check path",
+      "first_checks": [
+        "aws elbv2 describe-target-groups --output table",
+        "aws elbv2 describe-target-health --target-group-arn <TG_ARN> --output json | jq '.TargetHealthDescriptions[] | {target:.Target.Id,state:.TargetHealth.State,reason:.TargetHealth.Reason}'",
+        "aws ec2 describe-security-group-rules --filters 'Name=group-id,Values=<SG_ID>' --output json | jq '.SecurityGroupRules[] | select(.IsEgress==false)'",
+        "aws elbv2 describe-load-balancer-attributes --load-balancer-arn <ALB_ARN>"
+      ],
+      "resolution": "1. Fix the unhealthy targets (app crash \u2192 check logs; SG \u2192 allow health check port from ALB CIDR; wrong path \u2192 update health check config). 2. For 504: increase target response timeout.",
+      "prevention": "Set CloudWatch alarm on UnHealthyHostCount > 0. Use rolling deploys with health check gates.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "aws-route53-dns-failure": {
+      "platform": "aws",
+      "title": "AWS Route53 DNS Failure",
+      "symptoms": [
+        "DNS not resolving",
+        "NXDOMAIN",
+        "wrong IP returned",
+        "health check failing",
+        "failover not triggering"
+      ],
+      "likely_root_cause": "Missing or misconfigured DNS record, health check not associated with failover record, or propagation delay after recent change",
+      "first_checks": [
+        "aws route53 list-hosted-zones-by-name --dns-name <DOMAIN> --output table",
+        "aws route53 list-resource-record-sets --hosted-zone-id <ZONE_ID> --output json | jq '.ResourceRecordSets[] | select(.Name | contains(\"<HOSTNAME>\"))'",
+        "aws route53 list-health-checks --output table",
+        "dig <HOSTNAME> @8.8.8.8 +short"
+      ],
+      "resolution": "1. Verify record exists and points to correct value. 2. Check health check status and association. 3. For propagation delay: wait up to TTL seconds or reduce TTL before future changes.",
+      "prevention": "Set low TTL (60s) for records attached to health checks. Alert on health check failures.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "aws-lambda-error": {
+      "platform": "aws",
+      "title": "AWS Lambda Error / Timeout",
+      "symptoms": [
+        "Lambda timeout",
+        "Task timed out",
+        "Lambda error rate high",
+        "throttling",
+        "concurrency limit reached",
+        "Lambda cannot reach RDS or S3"
+      ],
+      "likely_root_cause": "Function timeout too low, concurrency limit hit, VPC misconfiguration blocking egress, or missing IAM permission on execution role",
+      "first_checks": [
+        "aws lambda get-function --function-name <FUNCTION_NAME> --output json | jq '{timeout:.Configuration.Timeout,memory:.Configuration.MemorySize,vpc:.Configuration.VpcConfig,role:.Configuration.Role}'",
+        "aws lambda get-function-concurrency --function-name <FUNCTION_NAME>",
+        "aws logs start-query --log-group-name /aws/lambda/<FUNCTION_NAME> --start-time $(date -u -v-1H +%s 2>/dev/null || date -u -d '1 hour ago' +%s) --end-time $(date -u +%s) --query-string 'fields @message | filter @message like /ERROR|timed out/ | limit 50'",
+        "aws cloudwatch describe-alarms --state-value ALARM --output table | grep <FUNCTION>"
+      ],
+      "resolution": "1. For timeout: increase timeout or optimise function. 2. For concurrency: request limit increase or add SQS queue. 3. For VPC egress: add NAT gateway or VPC endpoint. 4. For IAM: attach missing policy to execution role.",
+      "prevention": "Set CloudWatch alarms on Errors and Throttles. Use reserved concurrency to protect downstream services.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "aws-s3-access-denied": {
+      "platform": "aws",
+      "title": "AWS S3 Access Denied",
+      "symptoms": [
+        "S3 403 Forbidden",
+        "Access Denied on S3",
+        "NoSuchBucket",
+        "KMS key access denied on S3 object"
+      ],
+      "likely_root_cause": "Bucket policy denying the principal, public access block enabled, KMS key policy not granting the role decrypt permission, or missing s3:GetObject in role policy",
+      "first_checks": [
+        "aws s3api get-public-access-block --bucket <BUCKET>",
+        "aws s3api get-bucket-policy --bucket <BUCKET> --output json | jq '.Policy | fromjson'",
+        "aws s3api get-bucket-acl --bucket <BUCKET>",
+        "aws s3api get-bucket-encryption --bucket <BUCKET>"
+      ],
+      "resolution": "1. Add the principal to the bucket policy or role policy. 2. If KMS encrypted: grant kms:Decrypt to the role in the key policy. 3. Check public access block is not preventing intended access.",
+      "prevention": "Use IAM Access Analyzer to review bucket policy before applying. Never use ACLs \u2014 use bucket policies only.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "aws-kms-key-issue": {
+      "platform": "aws",
+      "title": "AWS KMS Key Disabled or Deleted",
+      "symptoms": [
+        "KMSDisabledException",
+        "KMSInvalidStateException",
+        "DisabledException",
+        "key is scheduled for deletion",
+        "decrypt failed",
+        "service cannot access encrypted resource"
+      ],
+      "likely_root_cause": "KMS key was disabled or scheduled for deletion, or the key policy was changed to exclude the service role",
+      "first_checks": [
+        "aws kms list-aliases --output table",
+        "aws kms describe-key --key-id <KEY_ID> --query 'KeyMetadata.{State:KeyState,DeletionDate:DeletionDate}'",
+        "aws kms get-key-policy --key-id <KEY_ID> --policy-name default --output json | jq '.Policy | fromjson'"
+      ],
+      "resolution": "1. If disabled: aws kms enable-key --key-id <KEY_ID> (requires user confirmation). 2. If scheduled for deletion: cancel with aws kms cancel-key-deletion --key-id <KEY_ID>. 3. If policy issue: add the principal to the key policy.",
+      "prevention": "Never schedule deletion of keys used by active services. Require MFA to disable/delete keys via SCP.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "terraform-state-drift": {
+      "platform": "terraform",
+      "title": "Terraform State Drift",
+      "symptoms": [
+        "resource exists in cloud but not in Terraform state",
+        "resource in .tf but missing from cloud",
+        "attribute in code differs from live describe output",
+        "shadow infra",
+        "out-of-band change"
+      ],
+      "likely_root_cause": "Manual change made directly in the cloud console or via CLI without updating Terraform code, or a failed apply left partial state",
+      "first_checks": [
+        "grep -rn 'resource \"' <REPO_ROOT> --include='*.tf' | sed 's/resource \"\\([^\"]*\\)\".*/\\1/' | sort | uniq -c | sort -rn | head -20",
+        "git -C <REPO_ROOT> log --oneline -10",
+        "git -C <REPO_ROOT> diff --name-only HEAD~1",
+        "cat <REPO_ROOT>/atlantis.yaml"
+      ],
+      "resolution": "1. For resource in cloud not in state: run terraform import (requires user confirmation). 2. For resource in state not in cloud: remove from state with terraform state rm. 3. For attribute drift: update .tf to match desired state and plan/apply.",
+      "prevention": "Enforce all cloud changes through Terraform/Atlantis PR workflow. Set up drift detection via scheduled terraform plan in CI.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "terraform-state-lock": {
+      "platform": "terraform",
+      "title": "Terraform State Lock Not Released",
+      "symptoms": [
+        "Error acquiring the state lock",
+        "state lock ID",
+        "lock held by another process",
+        "Atlantis plan/apply stuck"
+      ],
+      "likely_root_cause": "A previous terraform apply or Atlantis run was interrupted (crash, timeout, network loss) and did not release the GCS/S3 state lock",
+      "first_checks": [
+        "cat <REPO_ROOT>/atlantis.yaml | grep -A5 'backend\\|workspace'",
+        "gcloud storage objects list gs://<STATE_BUCKET>/ --filter='name~\".tflock\"'",
+        "aws dynamodb get-item --table-name <LOCK_TABLE> --key '{\"LockID\":{\"S\":\"<LOCK_ID>\"}}' 2>/dev/null"
+      ],
+      "resolution": "1. Confirm no active apply is running. 2. For GCS: delete the .tflock object manually (requires user confirmation). 3. For DynamoDB: delete the lock item (requires user confirmation). 4. Re-run the plan/apply.",
+      "prevention": "Set Atlantis timeout so stale locks auto-expire. Add alerting when a lock is held > 30 minutes.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "atlantis-plan-failure": {
+      "platform": "terraform",
+      "title": "Atlantis Plan / Apply Failure",
+      "symptoms": [
+        "Atlantis plan failed",
+        "Atlantis apply failed",
+        "Error: Invalid resource type",
+        "provider version mismatch",
+        "Error: Reference to undeclared resource",
+        "PR shows plan error comment"
+      ],
+      "likely_root_cause": "Terraform code error (syntax, undeclared reference, wrong resource type), provider version constraint violation, or missing variable/tfvars value",
+      "first_checks": [
+        "cat <REPO_ROOT>/atlantis.yaml",
+        "cat <REPO_ROOT>/versions.tf",
+        "grep -rn 'required_providers' <REPO_ROOT> --include='*.tf'",
+        "git -C <REPO_ROOT> diff HEAD~1 --name-only",
+        "grep -rn 'variable ' <REPO_ROOT> --include='*.tf' | grep -v 'default'"
+      ],
+      "resolution": "1. Read the Atlantis PR comment for the exact error line. 2. Fix the .tf file: declare missing variables, fix resource type name, or pin provider version. 3. Push a fix commit \u2014 Atlantis re-plans automatically.",
+      "prevention": "Run terraform validate and terraform fmt in CI before PR is opened. Pin provider versions with ~> constraints.",
+      "seen_count": 0,
+      "last_seen": null
+    },
+    "aws-missing-egress-ip-whitelist": {
+      "platform": "aws",
+      "title": "AWS Missing Egress IP in Partner Whitelist",
+      "symptoms": [
+        "403 Forbidden on outbound callbacks to external partner",
+        "intermittent 403 depending on which instance handles request",
+        "partner reports unexpected source IPs",
+        "works sometimes but not always (load-balancing across multiple egress IPs)"
+      ],
+      "likely_root_cause": "No NAT Gateway in VPC; multiple instances share egress duty via a forward proxy or directly; partner only whitelisted one instance IP; second instance IP (often auto-assigned/ephemeral) was never communicated",
+      "first_checks": [
+        "aws ec2 describe-nat-gateways --filter 'Name=vpc-id,Values=<VPC_ID>' \u2014 check if NAT GW exists",
+        "aws ec2 describe-route-tables --filters 'Name=vpc-id,Values=<VPC_ID>' \u2014 confirm 0.0.0.0/0 route (IGW vs NAT GW)",
+        "aws ec2 describe-instances --filters 'Name=vpc-id,Values=<VPC_ID>' | jq '[.Reservations[].Instances[] | {name: (.Tags[]|select(.Key==\"Name\")|.Value), publicIp: .PublicIpAddress}]' \u2014 list all public IPs",
+        "aws ec2 describe-addresses \u2014 find which public IPs are static EIPs vs ephemeral"
+      ],
+      "resolution": "1. Identify all instances whose public IP could be the source for partner traffic. 2. Communicate all EIPs to partner. 3. Assign static EIPs to any instance with ephemeral public IP to prevent recurrence on restart.",
+      "prevention": "Always provide all egress IPs (both AZs) when onboarding a partner requiring IP whitelisting. Assign static EIPs to all proxy instances. Long-term: use NAT Gateway to consolidate egress to 1-2 static IPs.",
+      "seen_count": 0,
+      "last_seen": null
+    }
+  }
+}

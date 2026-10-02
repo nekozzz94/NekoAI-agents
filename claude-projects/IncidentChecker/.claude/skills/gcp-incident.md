@@ -21,7 +21,14 @@ When this skill is invoked:
    - Which GCP project and region?
    - Approximate start time?
 
-2. Run the GCP Investigator agent with the symptom context.
+2. **Recall from memory** — search past incidents and patterns before starting:
+   ```bash
+   python3 scripts/memory_manager.py search-incidents --keywords "<symptom keywords>"
+   python3 scripts/memory_manager.py get-patterns --symptom "<symptom text>"
+   ```
+   Use `first_checks` from any matching pattern as the starting point for diagnosis.
+
+3. Run the GCP Investigator agent with the symptom context.
 
 3. Work through the GCP investigation checklist:
    - Confirm gcloud project/auth

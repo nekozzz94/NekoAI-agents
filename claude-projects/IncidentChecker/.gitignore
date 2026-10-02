@@ -1,0 +1,38 @@
+# Logs
+logs/
+
+# Local environment overrides
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated files - these may contain company-specific data
+knowledge/repository-registry.json
+
+# Local settings override
+.claude/settings.local.json
+
+# Logs
+*.log
+
+# Note: incidents/ directory and memory files are committed with sanitized examples
+# Replace with your own data after setup

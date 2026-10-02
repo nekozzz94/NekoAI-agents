@@ -1,0 +1,59 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/NekoAgents/DevOps/scripts/aws_readonly_guard.py",
+            "statusMessage": "AWS read-only guard checking..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/NekoAgents/DevOps/scripts/bash_logger.py",
+            "statusMessage": "Logging command..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/NekoAgents/DevOps/scripts/session_memory_hook.py",
+            "statusMessage": "Checking for unrecorded runbooks..."
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "additionalDirectories": [
+      "~/terraform-repos"
+    ],
+    "allow": [
+      "Bash(curl -s * jira.example.com*)",
+      "Bash(curl -s -X GET * jira.example.com*)",
+      "Bash(curl -s -X POST * jira.example.com*)",
+      "Bash(git stash)",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git log *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git branch *)"
+    ]
+  }
+}

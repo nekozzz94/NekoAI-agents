@@ -6,7 +6,7 @@ A collection of Claude Code project configurations for AI-assisted engineering w
 
 | Project | Description |
 |---|---|
-| [`DevOps`](./DevOps/) | AI-assisted incident response for GCP and Kubernetes environments |
+| [`IncidentChecker`](./IncidentChecker/) | AI-assisted incident response for GCP, AWS, and Kubernetes environments with memory system and Terraform inspection |
 
 ---
 
@@ -22,8 +22,11 @@ claude
 Then interact naturally or invoke a slash command:
 
 ```
-/gcp-incident   # start a GCP investigation
-/k8s-incident   # start a Kubernetes investigation
+/gcp-incident         # start a GCP investigation
+/k8s-incident         # start a Kubernetes investigation
+/read-jira            # fetch Jira ticket details
+/incident-runbook     # generate structured incident runbook
+/bitbucket-pr-review  # review Terraform code in PRs
 ```
 
 ---
@@ -40,33 +43,18 @@ Then interact naturally or invoke a slash command:
 
 ---
 
-## DevOps
+## IncidentChecker
 
-Incident troubleshooting for Google Cloud Platform and Kubernetes.
+AI-assisted incident response for multi-cloud environments (GCP, AWS, Kubernetes).
 
-**Skills**
+**Key Features**
+- Multi-cloud investigation with specialized agents
+- Long-term memory system that learns from past incidents
+- Terraform code inspection and security scanning
+- Jira/Bitbucket integration for ticket input and PR reviews
+- Automatic runbook generation
 
-| Command | Description |
-|---|---|
-| `/gcp-incident` | Investigate GCP quotas, networking, IAM, Cloud SQL, GKE control plane |
-| `/k8s-incident` | Deep-dive into pod/deployment health, HPA, OOMKill, CrashLoops |
-| `/incident-runbook` | Generate a structured runbook: symptoms → root cause → resolution |
-
-**Agents**
-
-| Agent | Role |
-|---|---|
-| `GCP Investigator` | Queries GCP APIs, reads logs/metrics, checks quotas and IAM |
-| `K8s Investigator` | Inspects cluster state via kubectl, finds failing workloads |
-| `Incident Commander` | Orchestrates both agents, synthesizes findings, produces incident report |
-
-**Prerequisites**
-
-```bash
-gcloud auth list
-kubectl config current-context
-gcloud config get-value project
-```
+See [`IncidentChecker/README.md`](./IncidentChecker/README.md) for full documentation, setup guide, and available skills/agents.
 
 ---
 

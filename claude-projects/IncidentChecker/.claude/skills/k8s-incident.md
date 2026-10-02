@@ -21,12 +21,19 @@ When this skill is invoked:
    - What is the observable symptom (error message, pod status, alert name)?
    - When did it start?
 
-2. Confirm the kubectl context is correct:
+2. **Recall from memory** — search past incidents and patterns before starting:
+   ```bash
+   python3 scripts/memory_manager.py search-incidents --keywords "<symptom keywords>"
+   python3 scripts/memory_manager.py get-patterns --symptom "<symptom text>"
+   ```
+   Use `first_checks` from any matching pattern as the starting point for diagnosis.
+
+3. Confirm the kubectl context is correct:
    ```bash
    kubectl config current-context
    ```
 
-3. Run the K8s Investigator agent with the symptom context.
+4. Run the K8s Investigator agent with the symptom context.
 
 4. Work through the checklist:
    - Node health and capacity (`kubectl get nodes`, `kubectl top nodes`)

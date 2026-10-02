@@ -118,4 +118,6 @@ kubectl get secret -n <NAMESPACE>
 #### Recommended Next Steps
 - <action 1>  (read-only/safe)
 - <action 2>  (requires confirmation)
+
+#### Steps and command were used
 ```
