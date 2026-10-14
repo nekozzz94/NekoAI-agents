@@ -1,3 +1,8 @@
+---
+name: gcp-incident
+description: GCP-focused investigation - quotas, networking, IAM, Cloud SQL, GKE control plane
+---
+
 # /gcp-incident
 
 Trigger a focused GCP-layer incident investigation.

@@ -1,3 +1,8 @@
+---
+name: incident-runbook
+description: Generate a structured runbook from symptoms, root cause, and resolution
+---
+
 # /incident-runbook
 
 Generate a structured incident runbook or post-mortem document from investigation findings.
@@ -31,7 +36,7 @@ When this skill is invoked:
 3. If the incident is resolved:
    - Generate a **post-mortem document** ready for stakeholder review
 
-4. Write the document to `incidents/YYYY-MM-DD-<slug>.md` (e.g. `incidents/2026-09-30-TICKET-12345-cloud-sql-quota.md`).
+4. Write the document to `incidents/YYYY-MM-DD-<slug>.md` (e.g. `incidents/2026-09-30-INC-12345-cloud-sql-quota.md`).
 
 5. After writing the runbook, record the incident to long-term memory:
 

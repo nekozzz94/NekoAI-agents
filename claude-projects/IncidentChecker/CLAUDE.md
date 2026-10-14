@@ -2,17 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# DevOps — GCP/AWS & Kubernetes
+# DevOps — GCP & Kubernetes
 
 ## Project Purpose
 
-This project provides AI-assisted incident response for Google Cloud Platform (GCP), AWS, and Kubernetes environments. Use it to diagnose cluster health issues, investigate failing workloads, and trace infrastructure anomalies to resolution.
-
-**Important**: This is a template project. Before using for your work:
-1. Replace all `example.com` references with your actual domain
-2. Update repository paths from `~/terraform-repos/` to your actual infrastructure repository location
-3. Configure your Jira/ticketing system URLs and credentials
-4. Customize the memory patterns and incident categories for your infrastructure
+This project provides AI-assisted incident response for Google Cloud Platform (GCP), AWS and Kubernetes environments. Use it to diagnose cluster health issues, investigate failing workloads, database issues and trace infrastructure anomalies to resolution.
 
 ---
 
@@ -22,8 +16,10 @@ This project provides AI-assisted incident response for Google Cloud Platform (G
 |---|---|
 | `/gcp-incident` | GCP-focused investigation: quotas, networking, IAM, Cloud SQL, GKE control plane |
 | `/k8s-incident` | Kubernetes workload deep-dive: pods, deployments, HPA, events, OOMKill, CrashLoops |
+| `/rds-replica-lag` | RDS read replica lag diagnosis: queries, write spikes, checkpoints, WAL replay issues |
 | `/incident-runbook` | Generate a structured runbook from symptoms → root cause → resolution |
-| `/bitbucket-pr-review` | Authenticate with Bitbucket, fetch a PR diff, and review Terraform code against a Jira ticket or Technical Design document |
+| `/read-jira` | Fetch Jira ticket details, search with JQL, post comments — uses macOS Keychain for auth |
+| `/log-investigator` | Investigate Cloud Logging URLs — expands shortened links, fetches logs, analyzes errors and patterns |
 | `/security-scan` | Scan `.claude/` directory for security vulnerabilities, misconfigurations, and injection risks |
 
 ---
@@ -34,17 +30,38 @@ This project provides AI-assisted incident response for Google Cloud Platform (G
 |---|---|
 | `GCP Investigator` | Queries GCP APIs, reads logs/metrics, checks quotas and IAM |
 | `K8s Investigator` | Inspects cluster state via kubectl, finds failing workloads |
-| `AWS Investigator` | Diagnoses AWS issues: IAM, VPC, ALB, Route53, CloudWatch, Lambda, S3, KMS |
-| `Terraform Inspector` | Reads Terraform code to map infrastructure and detect misconfigurations |
-| `Incident Commander` | Orchestrates multiple agents, synthesizes findings, produces incident reports |
-| `Requirements Reader` | Extracts structured incident input fields from Jira tickets or markdown files |
+| `Incident Commander` | Orchestrates both agents, synthesizes findings, produces incident report |
+| `AWS Investigator` | Diagnoses AWS issues: RDS, IAM, VPC/SGs/NACLs, ALB, Route53, CloudWatch, Lambda, S3, KMS, WAF, EC2/EBS, CloudTrail |
+| `Terraform Inspector` | Reads Terraform code in any repo under `~/ACME/Bitbucket/` to map intended infrastructure and detect misconfigurations — code only, no live cloud queries |
 | `security-reviewer` | Scans code for secrets, SSRF, injection, and OWASP Top 10 vulnerabilities |
 
-Bitbucket PR review is handled by the `/bitbucket-pr-review` skill (no dedicated agent file — the skill drives authentication and delegates to a general agent).
+### Automatic Hooks
 
-### AWS Read-Only Guard
+Three hooks run automatically on every session:
 
-A `PreToolUse` hook (`scripts/aws_readonly_guard.py`) runs automatically before every Bash command. It blocks any mutating `aws` CLI operation (create, delete, modify, put, attach, etc.) and returns an error with a `[AWS Read-Only Guard]` prefix. To run a mutating AWS command, you **must** ask the user for explicit confirmation first, then they approve the tool call.
+1. **AWS Read-Only Guard** (`PreToolUse`) — blocks mutating `aws` CLI commands (create, delete, modify, put, attach, etc.) and returns an error with `[AWS Read-Only Guard]` prefix. To run a mutating AWS command, ask the user for explicit confirmation first.
+
+2. **Bash Logger** (`PostToolUse`) — logs every Bash command to `logs/YYYY-MM-DD.md` for audit and debugging.
+
+3. **Session Memory Hook** (`Stop`) — at session end, scans for completed runbooks with a `### Root Cause` section and auto-records them to `incidents.jsonl` (episodic memory). No manual `add-incident` call needed.
+
+---
+
+## Project Structure
+
+```
+.
+├── .claude/
+│   ├── agents/          # Agent definitions (GCP, K8s, AWS, Terraform, Incident Commander)
+│   ├── skills/          # Skill definitions (/gcp-incident, /k8s-incident, /read-jira, etc.)
+│   ├── commands/        # Legacy commands (security-scan)
+│   ├── memory/          # Long-term memory (episodic + semantic)
+│   └── settings.json    # Hooks, permissions, allowed commands
+├── incidents/           # Generated runbooks (YYYY-MM-DD-<slug>.md format)
+├── knowledge/           # Repository registry (Terraform resource → repo mapping)
+├── logs/                # Auto-generated Bash command logs (YYYY-MM-DD.md, one per day)
+└── scripts/             # Python utilities (memory_manager, hooks, ec2_tags_from_ips)
+```
 
 ---
 
@@ -61,28 +78,36 @@ All memory operations go through `scripts/memory_manager.py`:
 
 ```bash
 # At start of investigation — recall similar past incidents
-python3 scripts/memory_manager.py search-incidents --keywords "OOMKill,payment-service,ssl"
+python3 scripts/memory_manager.py search-incidents --keywords "OOMKill,service-worker-1,ssl"
 
 # Get first-checks for a known failure pattern
 python3 scripts/memory_manager.py get-patterns --symptom "CrashLoopBackOff"
 python3 scripts/memory_manager.py get-patterns --symptom "certificate expired"
 
-# After resolution — record the incident
+# After resolution — record the incident (auto-handled by Stop hook, manual only if needed)
 python3 scripts/memory_manager.py add-incident --stdin < incident.json
 
 # After resolution — update or add a failure pattern
 python3 scripts/memory_manager.py add-pattern --category oom-memory-leak --stdin < patch.json
 ```
 
+> **Note:** `memory_manager.py` also has legacy provisioning commands (`find-repo`, `scan-root`, `get-workflow`) for Terraform resource lookup — still functional but not actively used in incident response.
+
 **When to write:** The `Stop` hook (`session_memory_hook.py`) automatically records completed runbooks to `incidents.jsonl` at the end of each turn — no manual `add-incident` call needed. You must still update semantic patterns manually with `add-pattern` after each incident.
+
+**Repository registry** — `knowledge/repository-registry.json` maps Terraform repos under `~/ACME/Bitbucket/` to their resource types. Refresh with:
+
+```bash
+python3 scripts/memory_manager.py refresh-registry
+```
 
 **`incident_patterns.json` categories** — each tagged with a `platform` field (`gcp`, `k8s`, `aws`, `terraform`):
 
 | Platform | Categories |
 |---|---|
-| `gcp` | `ssl-cert-expiry`, `cloud-sql-connectivity`, `quota-exhaustion` |
+| `gcp` | `ssl-cert-expiry`, `cloud-sql-connectivity`, `quota-exhaustion`, `gcp-restricted-universe-auth` |
 | `k8s` | `oom-memory-leak`, `crashloopbackoff-config`, `imagepullbackoff`, `node-notready`, `hpa-not-scaling` |
-| `aws` | `aws-iam-access-denied`, `aws-alb-unhealthy-targets`, `aws-route53-dns-failure`, `aws-lambda-error`, `aws-s3-access-denied`, `aws-kms-key-issue` |
+| `aws` | `aws-iam-access-denied`, `aws-alb-unhealthy-targets`, `aws-route53-dns-failure`, `aws-lambda-error`, `aws-s3-access-denied`, `aws-kms-key-issue`, `rds-replica-lag-queries`, `aws-missing-egress-ip-whitelist` |
 | `terraform` | `terraform-state-drift`, `terraform-state-lock`, `atlantis-plan-failure` |
 
 ---
@@ -92,8 +117,10 @@ python3 scripts/memory_manager.py add-pattern --category oom-memory-leak --stdin
 - **gcloud** CLI is authenticated (`gcloud auth list`)
 - **kubectl** is configured with the target cluster context
 - **GCP project** is set via `CLOUDSDK_CORE_PROJECT` or `gcloud config set project <project>`
+- **aws** CLI is configured (`aws sts get-caller-identity`)
 - Log access via **Cloud Logging** (`gcloud logging read`)
 - Metrics via **Cloud Monitoring** (`gcloud monitoring` or direct API)
+- **Jira API token** stored in macOS Keychain under service name `JiraAPIToken`
 
 Check prerequisites:
 
@@ -101,6 +128,19 @@ Check prerequisites:
 gcloud auth list
 kubectl config current-context
 gcloud config get-value project
+aws sts get-caller-identity
+security find-generic-password -s "JiraAPIToken" -w > /dev/null && echo "Jira token found"
+```
+
+### Useful Utilities
+
+```bash
+# Look up EC2 instance names/tags from IP addresses (useful for AWS incident triage)
+python3 scripts/ec2_tags_from_ips.py <IP1> <IP2> ...
+
+# Search repository registry for Terraform repos containing a resource type or keyword
+python3 scripts/memory_manager.py find-repo --resource-type google_sql_database_instance
+python3 scripts/memory_manager.py find-repo --keywords "postgres"
 ```
 
 ---
@@ -129,7 +169,7 @@ Before anything else, gather the full problem statement from one of these source
   ```
   /read-jira <TICKET-KEY>
   ```
-  The skill resolves credentials from the macOS keychain automatically, smoke-tests auth, fetches the full ticket, and extracts incident input fields (service, environment, symptoms, timeline). If auth fails (401) it prompts the user to refresh `JiraAPIToken` in the keychain.
+  The skill resolves credentials from the macOS keychain automatically, smoke-tests auth, fetches the full ticket, and extracts incident intake fields (service, environment, symptoms, timeline). If auth fails (401) it prompts the user to refresh `JiraAPIToken` in the keychain.
 
 - **Markdown file** — read the file the user points to (e.g. `incidents/draft-2026-09-30-oom.md`).
 
@@ -172,7 +212,7 @@ Before starting diagnosis, check whether a similar incident has been seen before
 
 ```bash
 # Search past incidents by symptom or service name
-python3 scripts/memory_manager.py search-incidents --keywords "OOMKill,payment-service"
+python3 scripts/memory_manager.py search-incidents --keywords "OOMKill,service-worker-1"
 
 # Get known failure patterns matching the current symptom
 python3 scripts/memory_manager.py get-patterns --symptom "CrashLoopBackOff"
@@ -219,10 +259,11 @@ Investigation checklist (in order):
 7. HPA — `kubectl get hpa -n $NS && kubectl describe hpa $HPA -n $NS`
 8. Services / endpoints — `kubectl get endpoints $SVC -n $NS`
 
-#### AWS issue (IAM, VPC/SGs, ALB, Route53, Lambda, S3, KMS, WAF, EC2)
+#### AWS issue (IAM, VPC/SGs, ALB, Route53, Lambda, S3, KMS, WAF, EC2, RDS)
 
 ```
 Agent: AWS Investigator
+Skill: /rds-replica-lag (for RDS-specific issues)
 ```
 
 Investigation checklist (in order):
@@ -234,15 +275,22 @@ Investigation checklist (in order):
 6. CloudWatch alarms — `aws cloudwatch describe-alarms --state-value ALARM`
 7. Lambda — `aws lambda get-function --function-name <NAME>` + CloudWatch Insights query
 8. S3 / KMS — bucket policy, public access block, key state
-9. CloudTrail audit — `aws cloudtrail lookup-events --lookup-attributes AttributeKey=ResourceName,AttributeValue=<ID>`
+9. RDS — `aws rds describe-db-instances`, replica lag via CloudWatch, Performance Insights for query analysis
+10. CloudTrail audit — `aws cloudtrail lookup-events --lookup-attributes AttributeKey=ResourceName,AttributeValue=<ID>`
 
 > **AWS Read-Only Guard:** the `PreToolUse` hook blocks all mutating `aws` commands automatically. Confirm with the user before any write operation.
+
+**For RDS replica lag specifically**, invoke `/rds-replica-lag` skill for comprehensive diagnosis:
+- CloudWatch metrics (ReplicaLag, CPUUtilization, IOPS)
+- Performance Insights (DB load, top SQL queries)
+- PostgreSQL logs analysis (long queries, checkpoints, conflicts)
+- Root cause diagnosis (long queries, write spikes, slow checkpoints, VACUUM conflicts)
 
 #### Terraform / infrastructure drift issue
 
 ```
 Agent: Terraform Inspector
-Repo root: ~/terraform-repos/<repo>
+Repo root: ~/ACME/Bitbucket/<repo>
 ```
 
 Investigation checklist (in order):
@@ -298,6 +346,7 @@ If the incident reveals a **new** pattern not yet in `incident_patterns.json`, c
 - **Networking**: VPC firewall rules, Cloud NAT, Private Service Connect
 - **IAM/auth failures**: check service account bindings, Workload Identity
 - **GKE control plane**: check cluster status, master version, upgrade state
+- **Restricted Universe auth**: use `gcloud iam service-accounts get-access-token` for restricted-universe.example domains
 
 ### Kubernetes
 - **CrashLoopBackOff**: logs → `kubectl logs <pod> --previous`, check exit codes
@@ -306,6 +355,13 @@ If the incident reveals a **new** pattern not yet in `incident_patterns.json`, c
 - **Pending pods**: node capacity, taints/tolerations, PVC binding, resource requests
 - **HPA not scaling**: check metrics-server, custom metrics, min/max bounds
 - **Node NotReady**: kubelet logs, disk pressure, network plugin
+
+### AWS
+- **RDS replica lag**: check CloudWatch ReplicaLag, Performance Insights DB load, long-running queries in PostgreSQL logs
+- **IAM access denied**: use `aws iam simulate-principal-policy` to test permissions
+- **ALB unhealthy targets**: check security groups, health check config, target instance health
+- **Lambda timeout/throttling**: check timeout settings, concurrency limits, VPC egress
+- **S3 access denied**: check bucket policy, KMS key policy, public access block settings
 
 ---
 
@@ -316,15 +372,12 @@ If the incident reveals a **new** pattern not yet in `incident_patterns.json`, c
 export GCP_PROJECT=<your-project-id>
 export K8S_CONTEXT=<your-kubectl-context>
 export K8S_NAMESPACE=<target-namespace>   # defaults to 'default'
+```
 
-# Bitbucket PR review (Option B — App Password)
-export BITBUCKET_USERNAME="user@example.com"
-export BITBUCKET_TOKEN=$(security find-generic-password -s "BitbucketAPIToken" -w)
+Jira credentials are stored in macOS Keychain — no environment variable needed. The `/read-jira` skill fetches the token inline via:
 
-# Jira integration (optional — for design context)
-export JIRA_BASE_URL=https://jira.example.com
-export JIRA_EMAIL="user@example.com"
-export JIRA_TOKEN=$(security find-generic-password -s 'JiraAPIToken' -w)
+```bash
+security find-generic-password -s "JiraAPIToken" -w
 ```
 
 ---

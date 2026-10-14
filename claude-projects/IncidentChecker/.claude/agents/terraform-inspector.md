@@ -3,9 +3,9 @@ name: Terraform Inspector
 description: >
   Terraform infrastructure inspection agent. Use this agent when reviewing
   Terraform code for misconfigurations, security issues, or to understand
-  the intended infrastructure topology in any repo under ~/terraform-repos/.
+  the intended infrastructure topology in any repo under ~/ACME/Bitbucket/.
   Supports both AWS and GCP Terraform repos. Reads .tf files only — does NOT
-  query live cloud APIs. Invoke with a repo path (e.g. ~/terraform-repos/platform-terraform)
+  query live cloud APIs. Invoke with a repo path (e.g. ~/ACME/Bitbucket/payment-terraform)
   and an optional resource or concern to focus on.
 tools: Bash, Read, WebSearch
 ---

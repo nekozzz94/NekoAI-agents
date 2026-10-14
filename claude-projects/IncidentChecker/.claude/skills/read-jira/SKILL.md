@@ -1,6 +1,11 @@
+---
+name: read-jira
+description: Fetch Jira ticket details, search with JQL, post comments — uses macOS Keychain for auth
+---
+
 # /read-jira
 
-Use this skill whenever you need to read from or write to Jira — fetching ticket details, searching with JQL, posting comments, or logging work against `jira.example.com`.
+Use this skill whenever you need to read from or write to Jira — fetching ticket details, searching with JQL, posting comments, or logging work against `tickets.example.com`.
 
 > **Security rule: Never print, echo, or expose the Jira API token.** Always fetch it inline using `$(security find-generic-password -s "JiraAPIToken" -w)` — never assign it to a variable that gets printed.
 
@@ -23,18 +28,18 @@ curl -H "Authorization: Bearer $(security find-generic-password -s 'JiraAPIToken
 curl -s -X GET \
   -H "Authorization: Bearer $(security find-generic-password -s 'JiraAPIToken' -w)" \
   -H "Accept: application/json" \
-  "https://jira.example.com/rest/api/2/issue/<ticket-id>?fields=summary,description,status,assignee,customfield_xxx" \
+  "https://tickets.example.com/rest/api/2/issue/<ticket-id>?fields=summary,description,status,assignee,customfield_xxx" \
   | jq '{
       key: .key,
       summary: .fields.summary,
       status: .fields.status.name,
       assignee: .fields.assignee.displayName,
-      _platform: [.fields.customfield_xxx[]?.value],
+      custom: [.fields.customfield_xxx[]?.value],
       description: .fields.description
     }'
 ```
 
-`customfield_xxx` is an example custom field — replace with your own custom field IDs. Custom fields are arrays of `{value: "..."}` objects. Empty field returns `[]`.
+`customfield_xxx` is the **Custom** field — an array of `{value: "..."}` objects. Example values: `"Tooling"`, `"service-core"`, `"service-shared"`. Empty field returns `[]`.
 
 ---
 
@@ -44,7 +49,7 @@ curl -s -X GET \
 curl -s -X GET \
   -H "Authorization: Bearer $(security find-generic-password -s 'JiraAPIToken' -w)" \
   -H "Accept: application/json" \
-  "https://jira.example.com/rest/api/2/issue/<ticket-id>/comment?maxResults=10" \
+  "https://tickets.example.com/rest/api/2/issue/<ticket-id>/comment?maxResults=10" \
   | jq '{
       total: .total,
       comments: [.comments[] | {
@@ -69,7 +74,7 @@ curl -s -X GET \
   --data-urlencode 'jql=Sprint in openSprints() AND assignee in ("user1@example.com") ORDER BY status DESC' \
   --data-urlencode 'fields=summary,assignee,status' \
   --data-urlencode 'maxResults=100' \
-  "https://jira.example.com/rest/api/2/search" \
+  "https://tickets.example.com/rest/api/2/search" \
   | jq '[.issues[] | {key: .key, summary: .fields.summary, assignee: .fields.assignee.displayName, status: .fields.status.name}]'
 ```
 
@@ -84,7 +89,7 @@ curl -s -X POST \
   -H "Authorization: Bearer $(security find-generic-password -s 'JiraAPIToken' -w)" \
   -H "Content-Type: application/json" \
   -d '{"body": "<comment text>"}' \
-  "https://jira.example.com/rest/api/2/issue/<ticket-id>/comment" \
+  "https://tickets.example.com/rest/api/2/issue/<ticket-id>/comment" \
   | jq '{id: .id, author: .author.displayName, body: .body}'
 ```
 
@@ -99,7 +104,7 @@ curl -s -X POST \
   -H "Authorization: Bearer $(security find-generic-password -s 'JiraAPIToken' -w)" \
   -H "Content-Type: application/json" \
   -d "{\"timeSpent\": \"<time>\", \"started\": \"$(date +%Y-%m-%dT%H:%M:%S.000%z)\"}" \
-  "https://jira.example.com/rest/api/2/issue/<ticket-id>/worklog" \
+  "https://tickets.example.com/rest/api/2/issue/<ticket-id>/worklog" \
   | jq '{id: .id, timeSpent: .timeSpent, author: .author.displayName}'
 ```
 
@@ -114,6 +119,6 @@ curl -s -X POST \
 | Post a comment | `POST /rest/api/2/issue/<ticket-id>/comment` |
 | Log work | `POST /rest/api/2/issue/<ticket-id>/worklog` |
 | Search with JQL | `GET /rest/api/2/search?jql=...&fields=...&maxResults=...` |
-| Base URL | `https://jira.example.com` |
+| Base URL | `https://tickets.example.com` |
 | Auth | Bearer token from macOS Keychain (`JiraAPIToken`) |
-| ITOPS Platform field | `customfield_xxx` → array of `{value: "..."}` objects |
+| Custom field | `customfield_xxx` → array of `{value: "..."}` objects |

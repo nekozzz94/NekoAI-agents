@@ -4,10 +4,11 @@ description: >
   AWS-focused incident investigation and troubleshooting agent. Use this agent
   when diagnosing issues across IAM/permissions, VPC networking, Security Groups,
   Network ACLs, ALB/Load Balancers, Route53 DNS, CloudWatch logs/alarms, Lambda,
-  KMS encryption, S3 access, WAF, and EC2/EBS. Reads live AWS state via CLI and
-  cross-references Terraform code under ~/terraform-repos/ when available.
-  Invoke in parallel with the Terraform Inspector for infrastructure issues that
-  need both code and live state analysis.
+  KMS encryption, S3 access, WAF, EC2/EBS, and RDS (database instances, replica lag,
+  Performance Insights). Reads live AWS state via CLI and cross-references Terraform
+  code under ~/ACME/Bitbucket/ when available. Invoke in parallel with the Terraform
+  Inspector for infrastructure issues that need both code and live state analysis.
+  For RDS replica lag specifically, use the /rds-replica-lag skill for comprehensive diagnosis.
 tools: Bash, Read
 ---
 
@@ -538,6 +539,120 @@ aws secretsmanager describe-secret --secret-id <SECRET_NAME> \
 
 ---
 
+## Phase 13 — RDS (Database Instances)
+
+```bash
+# List RDS instances
+aws rds describe-db-instances \
+  --query 'DBInstances[*].{ID:DBInstanceIdentifier,Engine:Engine,Version:EngineVersion,Class:DBInstanceClass,Status:DBInstanceStatus,AZ:AvailabilityZone,MultiAZ:MultiAZ}' \
+  --output table
+
+# Describe a specific instance
+aws rds describe-db-instances \
+  --db-instance-identifier <INSTANCE_ID> \
+  --query 'DBInstances[0].{ID:DBInstanceIdentifier,Status:DBInstanceStatus,Endpoint:Endpoint.Address,Port:Endpoint.Port,Engine:Engine,Version:EngineVersion,Class:DBInstanceClass,Storage:AllocatedStorage,IOPS:Iops,MultiAZ:MultiAZ,ReadReplicas:ReadReplicaDBInstanceIdentifiers,SourceDB:ReadReplicaSourceDBInstanceIdentifier}' \
+  --output table
+
+# List DB parameter groups
+aws rds describe-db-parameter-groups \
+  --query 'DBParameterGroups[*].{Name:DBParameterGroupName,Family:DBParameterGroupFamily,Description:Description}' \
+  --output table
+
+# Check parameters in a group (subset for investigation)
+aws rds describe-db-parameters \
+  --db-parameter-group-name <PARAM_GROUP> \
+  --query 'Parameters[?ParameterName==`hot_standby_feedback` || ParameterName==`max_standby_streaming_delay` || ParameterName==`statement_timeout`]' \
+  --output table
+
+# Check recent automated backups
+aws rds describe-db-snapshots \
+  --db-instance-identifier <INSTANCE_ID> \
+  --snapshot-type automated \
+  --max-records 10 \
+  --query 'DBSnapshots[*].{ID:DBSnapshotIdentifier,Created:SnapshotCreateTime,Status:Status,Type:SnapshotType}' \
+  --output table
+
+# List DB log files
+aws rds describe-db-log-files \
+  --db-instance-identifier <INSTANCE_ID> \
+  --query 'DescribeDBLogFiles | sort_by(@, &LastWritten) | [-10:].[LogFileName,LastWritten,Size]' \
+  --output table
+
+# Download log file portion (last 1000 lines)
+aws rds download-db-log-file-portion \
+  --db-instance-identifier <INSTANCE_ID> \
+  --log-file-name <LOG_FILE_NAME> \
+  --output text | tail -1000
+
+# CloudWatch metrics for RDS — Replica Lag
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/RDS \
+  --metric-name ReplicaLag \
+  --dimensions Name=DBInstanceIdentifier,Value=<REPLICA_INSTANCE_ID> \
+  --start-time $(date -u -v-6H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 3600 \
+  --statistics Average Maximum \
+  --output table
+
+# CloudWatch metrics for RDS — Database Connections
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/RDS \
+  --metric-name DatabaseConnections \
+  --dimensions Name=DBInstanceIdentifier,Value=<INSTANCE_ID> \
+  --start-time $(date -u -v-6H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 3600 \
+  --statistics Average Maximum \
+  --output table
+
+# CloudWatch metrics for RDS — CPU Utilization
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/RDS \
+  --metric-name CPUUtilization \
+  --dimensions Name=DBInstanceIdentifier,Value=<INSTANCE_ID> \
+  --start-time $(date -u -v-6H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 3600 \
+  --statistics Average Maximum \
+  --output table
+
+# Performance Insights — Get DBI Resource ID
+aws rds describe-db-instances \
+  --db-instance-identifier <INSTANCE_ID> \
+  --query 'DBInstances[0].DbiResourceId' \
+  --output text
+
+# Performance Insights — DB Load
+aws pi get-resource-metrics \
+  --service-type RDS \
+  --identifier <DBI_RESOURCE_ID> \
+  --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period-in-seconds 300 \
+  --metric-queries '[{"Metric":"db.load.avg"}]'
+
+# Performance Insights — Top SQL queries
+aws pi describe-dimension-keys \
+  --service-type RDS \
+  --identifier <DBI_RESOURCE_ID> \
+  --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --metric db.load.avg \
+  --period-in-seconds 300 \
+  --group-by '{"Group":"db.sql"}' \
+  --max-results 10
+```
+
+**For comprehensive RDS replica lag diagnosis**, invoke the `/rds-replica-lag` skill instead:
+- Automates lag trend analysis
+- Correlates primary write activity with replica performance
+- Analyzes PostgreSQL logs for long queries and checkpoints
+- Provides root cause diagnosis (long queries, write spikes, slow checkpoints, VACUUM conflicts)
+- Suggests remediation options
+
+---
+
 ## Common Incident Patterns
 
 | Symptom | Start Here |
@@ -551,6 +666,9 @@ aws secretsmanager describe-secret --secret-id <SECRET_NAME> \
 | Instance unreachable | Phase 10 — EC2 status + Phase 2 SG/NACL |
 | "Who deleted X?" | Phase 11 — CloudTrail lookup by resource |
 | Secret rotation broke app | Phase 12 — secret last rotated, then Phase 6 (Lambda rotator) |
+| RDS replica lag / stale data | Phase 13 — ReplicaLag metric, Performance Insights, or invoke `/rds-replica-lag` |
+| RDS connection failures | Phase 13 — instance status, parameter group, security groups (Phase 2) |
+| Database slow queries | Phase 13 — Performance Insights top SQL, CloudWatch CPU/IOPS |
 
 ---
 

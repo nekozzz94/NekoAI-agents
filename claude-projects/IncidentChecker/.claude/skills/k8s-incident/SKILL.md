@@ -1,3 +1,8 @@
+---
+name: k8s-incident
+description: Kubernetes workload deep-dive - pods, deployments, HPA, events, OOMKill, CrashLoops
+---
+
 # /k8s-incident
 
 Trigger a focused Kubernetes workload incident investigation.

@@ -38,12 +38,12 @@
   },
   "permissions": {
     "additionalDirectories": [
-      "~/terraform-repos"
+      "~/ACME/Bitbucket"
     ],
     "allow": [
-      "Bash(curl -s * jira.example.com*)",
-      "Bash(curl -s -X GET * jira.example.com*)",
-      "Bash(curl -s -X POST * jira.example.com*)",
+      "Bash(curl -s * tickets.example.com*)",
+      "Bash(curl -s -X GET * tickets.example.com*)",
+      "Bash(curl -s -X POST * tickets.example.com*)",
       "Bash(git stash)",
       "Bash(git checkout *)",
       "Bash(git pull *)",
@@ -53,7 +53,8 @@
       "Bash(git log *)",
       "Bash(git status)",
       "Bash(git diff *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(curl *GET*)"
     ]
   }
 }
